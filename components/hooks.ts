@@ -29,3 +29,32 @@ export function usePoll(intervalMs: number, enabled: boolean) {
         return () => clearInterval(id);
     }, [intervalMs, enabled]);
 }
+
+/**
+ * How many dashboard columns the available width can hold: 3, 2 or 1.
+ *
+ * Measured on the container rather than the viewport, so Discord's server rail
+ * and any other chrome are already excluded and the numbers mean what they say.
+ * The count has to be known in JS because widgets are bucketed into columns
+ * there; CSS alone could size tracks but could not decide what goes in them.
+ */
+export function useColumnCount(ref: React.RefObject<HTMLElement | null>): number {
+    const [count, setCount] = React.useState(2);
+
+    React.useEffect(() => {
+        const el = ref.current;
+        if (!el || typeof ResizeObserver !== "function") return;
+
+        const observer = new ResizeObserver(entries => {
+            const width = entries[0]?.contentRect.width ?? 0;
+            const next = width >= 1600 ? 3 : width >= 1000 ? 2 : 1;
+            // Only re-render when the answer actually changes, not on every
+            // observed pixel of a window drag
+            setCount(prev => (prev === next ? prev : next));
+        });
+        observer.observe(el);
+        return () => observer.disconnect();
+    }, [ref]);
+
+    return count;
+}

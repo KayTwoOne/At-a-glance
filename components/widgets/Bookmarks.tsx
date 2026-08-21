@@ -124,8 +124,14 @@ function BookmarkRow({ bookmark }: { bookmark: GlanceBookmark; }) {
 export function BookmarksWidget() {
     const { bookmarks } = useGlanceConfig();
 
+    // No "0 saved" when there is nothing: the empty state already says that,
+    // and a zero in the header just repeats it in a colder way.
+    const summary = bookmarks.length > 0
+        ? `${bookmarks.length} saved`
+        : undefined;
+
     return (
-        <WidgetCard id="bookmarks">
+        <WidgetCard id="bookmarks" summary={summary}>
             {bookmarks.length === 0
                 ? (
                     <div className="vc-glance-empty">

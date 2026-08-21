@@ -62,6 +62,16 @@ const documentShim = new Proxy({}, {
 // (a) direct script assignments would register these shims as global *types*
 // for the whole TS project, clobbering the real VencordNative declaration, and
 // (b) some Node globals (navigator) are getter-only and refuse plain sets.
+// Node's globalThis has no DOM event methods, so anything calling
+// window.addEventListener at module scope blows up before we can judge whether
+// the bundle is actually healthy. Equicord's larger plugin set does exactly
+// that, where Vencord's never did.
+if (typeof globalThis.addEventListener !== "function") {
+    globalThis.addEventListener = noop;
+    globalThis.removeEventListener = noop;
+    globalThis.dispatchEvent = () => true;
+}
+
 const shims = {
     window: globalThis,
     self: globalThis,

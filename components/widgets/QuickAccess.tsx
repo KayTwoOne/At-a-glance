@@ -36,6 +36,7 @@ import { usePoll } from "../hooks";
 import { ChatIcon, ChevronIcon, DotsIcon, HashIcon, HeadphonesIcon, MicIcon, SpeakerIcon, VideoIcon } from "../icons";
 import { RowDragGhost, RowDropSlot, useRowDrag } from "../rowDrag";
 import { WidgetCard } from "../WidgetCard";
+import { dmIdentity } from "./Mentions";
 
 const logger = new Logger("AtAGlance");
 
@@ -151,6 +152,24 @@ function groupDMLabel(channel: any): string {
         })
         .filter(Boolean);
     return names.length > 0 ? names.join(", ") : "Group DM";
+}
+
+/** Header avatar for the "Group DMs" bucket: the bucket's first watched
+ *  channel, via dmIdentity's own icon resolution. A group DM without a custom
+ *  icon has nothing there - dmIdentity returns no avatar rather than trying to
+ *  reproduce Discord's composite-of-recipients icon - so fall back to the
+ *  first recipient's avatar instead of showing nothing at all. */
+function dmBucketAvatarUrl(channelId: string | undefined): string | undefined {
+    if (!channelId) return undefined;
+    const channel = ChannelStore.getChannel(channelId);
+    if (!channel) return undefined;
+
+    const { avatarUrl } = dmIdentity(channel);
+    if (avatarUrl) return avatarUrl;
+
+    const firstRecipientId = channel.recipients?.[0];
+    const user = firstRecipientId ? UserStore.getUser(firstRecipientId) : undefined;
+    return user?.getAvatarURL(void 0, 40, false);
 }
 
 function VoiceChannelRow({ channelId, siblingIds, index, hideGuild }: { channelId: string; siblingIds: string[]; index: number; hideGuild?: boolean; }) {
@@ -292,27 +311,31 @@ function VoiceChannelRow({ channelId, siblingIds, index, hideGuild }: { channelI
                         <div className="vc-glance-row-actions" onClick={e => e.stopPropagation()}>
                             {count > 0 && (
                                 <span className="vc-glance-voice-occupancy">
-                                    <span className="vc-glance-voice-avatars">
-                                        {shownIds.map(id => {
-                                            const user = UserStore.getUser(id);
-                                            if (!user) return null;
-                                            const flags = [
-                                                "vc-glance-voice-avatar",
-                                                speakers.includes(id) && "vc-glance-speaking",
-                                                voiceStates[id]?.selfStream && "vc-glance-streaming",
-                                                newIds.has(id) && "vc-glance-occupant-joined"
-                                            ].filter(Boolean).join(" ");
-                                            return (
-                                                <img
-                                                    key={id}
-                                                    className={flags}
-                                                    src={user.getAvatarURL(void 0, 32, false)}
-                                                    alt=""
-                                                    draggable={false}
-                                                />
-                                            );
-                                        })}
-                                    </span>
+                                    {/* Avatars only while collapsed - expanding already lists everyone
+                                        by name below, so showing the same faces here too is redundant. */}
+                                    {!expanded && (
+                                        <span className="vc-glance-voice-avatars">
+                                            {shownIds.map(id => {
+                                                const user = UserStore.getUser(id);
+                                                if (!user) return null;
+                                                const flags = [
+                                                    "vc-glance-voice-avatar",
+                                                    speakers.includes(id) && "vc-glance-speaking",
+                                                    voiceStates[id]?.selfStream && "vc-glance-streaming",
+                                                    newIds.has(id) && "vc-glance-occupant-joined"
+                                                ].filter(Boolean).join(" ");
+                                                return (
+                                                    <img
+                                                        key={id}
+                                                        className={flags}
+                                                        src={user.getAvatarURL(void 0, 32, false)}
+                                                        alt=""
+                                                        draggable={false}
+                                                    />
+                                                );
+                                            })}
+                                        </span>
+                                    )}
                                     <span className="vc-glance-voice-count">
                                         {count > MAX_INLINE_AVATARS ? `+${count - MAX_INLINE_AVATARS}` : count}
                                     </span>
@@ -440,7 +463,7 @@ function TextChannelRow({ channelId, siblingIds, index, hideGuild }: { channelId
 
 const DM_KEY = "dm";
 
-/** One server's watched channels - a collapsible section (voice then text).
+/** One server's watched channels - a collapsible section (text then voice).
  *  The header doubles as the drag handle: click toggles collapse, click-and-
  *  drag past the threshold reorders the whole section. */
 function GuildSection({ guildKey, voiceIds, textIds, onHeaderPress, wasDragged }: {
@@ -468,8 +491,14 @@ function GuildSection({ guildKey, voiceIds, textIds, onHeaderPress, wasDragged }
     }, [textIds.join(",")]);
 
     const isDM = guildKey === DM_KEY;
-    const name = isDM ? "Direct Messages" : (guild?.name ?? "Unknown server");
+    const name = isDM ? "Group DMs" : (guild?.name ?? "Unknown server");
     const iconUrl = guild ? IconUtils.getGuildIconURL({ id: guild.id, icon: guild.icon, size: 64 }) : undefined;
+    const dmAvatarUrl = useStateFromStores(
+        [ChannelStore, UserStore],
+        () => isDM ? dmBucketAvatarUrl(voiceIds[0]) : undefined,
+        [isDM, voiceIds[0]]
+    );
+    const headerIconUrl = iconUrl ?? dmAvatarUrl;
     const total = voiceIds.length + textIds.length;
 
     const toggle = () => {
@@ -502,8 +531,8 @@ function GuildSection({ guildKey, voiceIds, textIds, onHeaderPress, wasDragged }
                     className={"vc-glance-chevron" + (collapsed ? "" : " vc-glance-chevron-open")}
                     size={14}
                 />
-                {iconUrl
-                    ? <img className="vc-glance-guild-header-icon" src={iconUrl} alt="" draggable={false} />
+                {headerIconUrl
+                    ? <img className="vc-glance-guild-header-icon" src={headerIconUrl} alt="" draggable={false} />
                     : (
                         <div className="vc-glance-guild-header-icon vc-glance-guild-icon-fallback">
                             {isDM ? "DM" : (guild ? guildAcronym(guild.name) : "?")}
@@ -520,17 +549,17 @@ function GuildSection({ guildKey, voiceIds, textIds, onHeaderPress, wasDragged }
 
             {!collapsed && (
                 <div className="vc-glance-guild-body">
-                    {voiceIds.length > 0 && (
-                        <div className="vc-glance-row-list">
-                            {voiceIds.map((id, i) => (
-                                <VoiceChannelRow key={id} channelId={id} siblingIds={voiceIds} index={i} hideGuild />
-                            ))}
-                        </div>
-                    )}
                     {textIds.length > 0 && (
                         <div className="vc-glance-row-list">
                             {textIds.map((id, i) => (
                                 <TextChannelRow key={id} channelId={id} siblingIds={textIds} index={i} hideGuild />
+                            ))}
+                        </div>
+                    )}
+                    {voiceIds.length > 0 && (
+                        <div className="vc-glance-row-list">
+                            {voiceIds.map((id, i) => (
+                                <VoiceChannelRow key={id} channelId={id} siblingIds={voiceIds} index={i} hideGuild />
                             ))}
                         </div>
                     )}
@@ -544,9 +573,10 @@ export function QuickAccessWidget() {
     const { watchedChannels } = useGlanceConfig();
 
     // Group watched channels by server, preserving the order servers first
-    // appear in. Within a server, voice channels come before text; channels
-    // that no longer resolve fall into the text list so they can still be
-    // removed. DMs / group DMs bucket under a shared "Direct Messages" section.
+    // appear in. Within a server, text channels come before voice, matching
+    // Discord's own sidebar; channels that no longer resolve fall into the
+    // text list so they can still be removed. DMs / group DMs bucket under a
+    // shared "Group DMs" section.
     const order: string[] = [];
     const buckets = new Map<string, { voiceIds: string[]; textIds: string[]; }>();
     let anyVoice = false;
@@ -590,6 +620,25 @@ export function QuickAccessWidget() {
     // while any voice channel is watched keeps it near-real-time.
     usePoll(2000, anyVoice);
 
+    // Is there anything in here with something unread. That's the one question
+    // worth answering while collapsed - not a count, not per-server totals,
+    // just whether anything needs opening.
+    //
+    // Group DMs have to be pulled back out of the voice bucket. Discord reports
+    // them as vocal, so the bucketing above files them with voice channels, but
+    // they carry real conversations and their unread state is exactly what this
+    // dot exists to surface.
+    const unreadCandidates = order.flatMap(key => {
+        const bucket = buckets.get(key)!;
+        const groupDms = bucket.voiceIds.filter(id => ChannelStore.getChannel(id)?.type === 3);
+        return [...bucket.textIds, ...groupDms];
+    });
+    const hasUnread = useStateFromStores(
+        [ReadStateStore],
+        () => unreadCandidates.some(id => ReadStateStore.hasUnread(id)),
+        [unreadCandidates.join(",")]
+    );
+
     const visibleKeys = drag ? order.filter(key => key !== drag.id) : order;
     const rendered: React.ReactNode[] = [];
     visibleKeys.forEach((key, i) => {
@@ -615,7 +664,7 @@ export function QuickAccessWidget() {
     const dragBucket = drag ? buckets.get(drag.id) : undefined;
 
     return (
-        <WidgetCard id="quick-access">
+        <WidgetCard id="quick-access" indicator={hasUnread}>
             {watchedChannels.length === 0
                 ? (
                     <div className="vc-glance-empty">

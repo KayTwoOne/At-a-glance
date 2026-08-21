@@ -8,31 +8,41 @@ import * as DataStore from "@api/DataStore";
 import { Logger } from "@utils/Logger";
 import { React, UserStore } from "@webpack/common";
 
+import {
+    DEFAULT_HIDDEN_WIDGETS,
+    DEFAULT_STOPWATCH_STATE,
+    DEFAULT_TIMER_STATE,
+    MAX_COLUMNS,
+    migrateHiddenWidgets,
+    PersistedStopwatchState,
+    PersistedTimerState,
+    QUICK_TOOL_IDS,
+    QuickToolId,
+    rewriteSplitWidgets,
+    sanitizeEmptyBehaviour,
+    sanitizeQuickToolsTab,
+    sanitizeStopwatchState,
+    sanitizeTimerState,
+    sanitizeWidgetColumns,
+    sanitizeWidgetIdList,
+    sanitizeWidgetOrder,
+    seedColumnsFromGroups,
+    WIDGET_IDS,
+    WIDGET_META,
+    WidgetEmptyBehaviour,
+    WidgetIconKey,
+    WidgetId
+} from "./widgetRegistry";
+
+export { MAX_COLUMNS, QUICK_TOOL_IDS, WIDGET_META };
+export type { PersistedStopwatchState, PersistedTimerState, QuickToolId, WidgetEmptyBehaviour, WidgetIconKey, WidgetId };
+
+// Computed once: WIDGET_META is a static literal, so every widget's seed
+// column never changes at runtime. Recomputing it per call (fresh config,
+// every sanitize, every getWidgetColumn) would just be wasted work.
+const SEED_COLUMNS = seedColumnsFromGroups();
+
 const logger = new Logger("AtAGlance");
-
-export type WidgetGroup = "social" | "tools";
-
-export const WIDGET_META = [
-    { id: "pinned-friends", label: "Pinned Friends", group: "social" },
-    { id: "quick-access", label: "Quick Access Channels", group: "social" },
-    { id: "mentions", label: "Inbox", group: "social" },
-    { id: "bookmarks", label: "Saved Messages", group: "social" },
-    { id: "events", label: "Upcoming Events", group: "social" },
-    { id: "quick-tools", label: "Quick Tools", group: "tools" },
-    { id: "reminders", label: "Reminders", group: "tools" },
-    { id: "integrations", label: "Integrations & Notes", group: "tools" },
-    { id: "client-perf", label: "Client Performance", group: "tools" },
-    // Optional remote control for the separate OrionQuests plugin. Off unless the
-    // user opts in via Add Widget, and inert unless that plugin is also enabled.
-    { id: "orion", label: "Orion", group: "tools", defaultHidden: true }
-] as const satisfies ReadonlyArray<{ id: string; label: string; group: WidgetGroup; defaultHidden?: boolean; }>;
-
-export type WidgetId = typeof WIDGET_META[number]["id"];
-const WIDGET_IDS = WIDGET_META.map(w => w.id) as WidgetId[];
-/** Widgets that start hidden - shown only once the user enables them */
-const DEFAULT_HIDDEN_WIDGETS = WIDGET_META
-    .filter(w => "defaultHidden" in w && w.defaultHidden)
-    .map(w => w.id) as WidgetId[];
 
 export interface WeatherLocation {
     name: string;
@@ -83,7 +93,7 @@ export const DEFAULT_APPEARANCE: GlanceAppearance = {
 };
 
 export interface GlanceConfig {
-    version: 3;
+    version: 6;
     /** User IDs pinned to the "Pinned Friends" widget */
     pinnedUsers: string[];
     /** Channel IDs in "Quick Access" (guild text/voice, group DMs); split by type at render */
@@ -100,6 +110,17 @@ export interface GlanceConfig {
     collapsedGuilds: string[];
     /** Display order - a sanitized permutation of all widget ids */
     widgetOrder: WidgetId[];
+    /** Which column each widget sits in. Seeded once from the registry's group,
+     *  then owned entirely by the user. */
+    widgetColumns: Partial<Record<WidgetId, number>>;
+    /** Per-widget behaviour when the widget has nothing to show */
+    widgetEmptyBehaviour: Partial<Record<WidgetId, WidgetEmptyBehaviour>>;
+    /** Which Quick Tools tab is showing */
+    quickToolsTab: QuickToolId;
+    /** Countdown timer snapshot, written only at arm/cancel - see setTimerState */
+    timerState: PersistedTimerState;
+    /** Stopwatch snapshot, written only at start/pause/reset - see setStopwatchState */
+    stopwatchState: PersistedStopwatchState;
     /** Material/colour customization */
     appearance: GlanceAppearance;
     /** Saved messages: IDs + a plain-text snapshot so rows render instantly forever */
@@ -148,7 +169,7 @@ const SNOWFLAKE_RE = /^\d{17,21}$/;
 
 function freshConfig(): GlanceConfig {
     return {
-        version: 3,
+        version: 6,
         pinnedUsers: [],
         watchedChannels: [],
         notes: "",
@@ -157,6 +178,11 @@ function freshConfig(): GlanceConfig {
         collapsedWidgets: [],
         collapsedGuilds: [],
         widgetOrder: [...WIDGET_IDS],
+        widgetColumns: { ...SEED_COLUMNS },
+        widgetEmptyBehaviour: sanitizeEmptyBehaviour(undefined),
+        quickToolsTab: "clock",
+        timerState: { ...DEFAULT_TIMER_STATE },
+        stopwatchState: { ...DEFAULT_STOPWATCH_STATE },
         appearance: { ...DEFAULT_APPEARANCE },
         bookmarks: [],
         reminders: []
@@ -170,6 +196,21 @@ let config: GlanceConfig = freshConfig();
 let loadedForUser: string | null = null;
 
 const listeners = new Set<() => void>();
+
+// A second, narrower listener set, separate from useGlanceConfig()'s: module-
+// local state that lives outside `config` (Quick Tools' timer/stopwatch) needs
+// to know when a load has replaced `config` wholesale, but must not be woken by
+// every other mutation emit() already covers - that would defeat the point of
+// keeping that state off the big listener list in the first place.
+type ConfigLoadListener = (loaded: GlanceConfig) => void;
+const configLoadListeners = new Set<ConfigLoadListener>();
+
+/** Runs once per loadConfig() resolution (startup, reconnect, account switch),
+ *  after `config` has already been replaced with the freshly loaded snapshot. */
+export function onConfigLoad(listener: ConfigLoadListener): () => void {
+    configLoadListeners.add(listener);
+    return () => void configLoadListeners.delete(listener);
+}
 
 function storageKey(userId: string) {
     return `AtAGlance_${userId}`;
@@ -212,26 +253,6 @@ export function sanitizeLocation(value: unknown): WeatherLocation | null {
     if (typeof lon !== "number" || !Number.isFinite(lon) || Math.abs(lon) > 180) return null;
 
     return { name: name.slice(0, MAX_LOCATION_NAME), lat, lon };
-}
-
-function sanitizeWidgetIdList(value: unknown): WidgetId[] {
-    if (!Array.isArray(value)) return [];
-    return WIDGET_IDS.filter(id => value.includes(id));
-}
-
-/**
- * Like sanitizeWidgetIdList, but keeps default-hidden widgets hidden for users
- * upgrading from a config that predates them. A default-hidden widget the stored
- * order has never listed is brand-new to this user, so it starts hidden; once
- * they've seen it (it's in their saved order) their explicit choice is honoured.
- */
-function migrateHiddenWidgets(hidden: unknown, storedOrder: unknown): WidgetId[] {
-    const out = sanitizeWidgetIdList(hidden);
-    const known = Array.isArray(storedOrder) ? storedOrder : [];
-    for (const id of DEFAULT_HIDDEN_WIDGETS) {
-        if (!out.includes(id) && !known.includes(id)) out.push(id);
-    }
-    return out;
 }
 
 // Quick Access groups its watched channels by server; the collapse key is a
@@ -283,28 +304,6 @@ export function sanitizeAppearance(raw: unknown): GlanceAppearance {
     };
 }
 
-/** Stored order filtered to known ids, with any missing ids appended in default order */
-/**
- * Preserves the INPUT order (deduped, valid ids only), then appends any widgets
- * missing from it. NOTE: must NOT use sanitizeWidgetIdList here - that iterates
- * WIDGET_IDS (default order) and would throw away the user's custom ordering,
- * resetting layout on every save/load.
- */
-function sanitizeWidgetOrder(value: unknown): WidgetId[] {
-    const out: WidgetId[] = [];
-    if (Array.isArray(value)) {
-        for (const id of value) {
-            if (WIDGET_IDS.includes(id as WidgetId) && !out.includes(id as WidgetId)) {
-                out.push(id as WidgetId);
-            }
-        }
-    }
-    for (const id of WIDGET_IDS) {
-        if (!out.includes(id)) out.push(id);
-    }
-    return out;
-}
-
 /**
  * Validates untrusted data (from IndexedDB) into a well-formed config.
  * Only explicitly known fields are copied over; unknown keys are discarded.
@@ -313,15 +312,23 @@ function sanitizeWidgetOrder(value: unknown): WidgetId[] {
 export function sanitizeConfig(raw: unknown): GlanceConfig {
     const source = typeof raw === "object" && raw !== null ? raw as Record<string, unknown> : {};
     return {
-        version: 3,
+        version: 6,
         pinnedUsers: sanitizeIdList(source.pinnedUsers, MAX_PINNED_USERS),
         watchedChannels: sanitizeIdList(source.watchedChannels, MAX_WATCHED_CHANNELS),
         notes: typeof source.notes === "string" ? source.notes.slice(0, MAX_NOTES_LENGTH) : "",
         weatherLocation: sanitizeLocation(source.weatherLocation),
-        hiddenWidgets: migrateHiddenWidgets(source.hiddenWidgets, source.widgetOrder),
-        collapsedWidgets: sanitizeWidgetIdList(source.collapsedWidgets),
+        hiddenWidgets: migrateHiddenWidgets(
+            rewriteSplitWidgets(source.hiddenWidgets),
+            rewriteSplitWidgets(source.widgetOrder)
+        ),
+        collapsedWidgets: sanitizeWidgetIdList(rewriteSplitWidgets(source.collapsedWidgets)),
         collapsedGuilds: sanitizeGuildCollapseList(source.collapsedGuilds),
-        widgetOrder: sanitizeWidgetOrder(source.widgetOrder),
+        widgetOrder: sanitizeWidgetOrder(rewriteSplitWidgets(source.widgetOrder)),
+        widgetColumns: sanitizeWidgetColumns(source.widgetColumns, SEED_COLUMNS),
+        widgetEmptyBehaviour: sanitizeEmptyBehaviour(source.widgetEmptyBehaviour),
+        quickToolsTab: sanitizeQuickToolsTab(source.quickToolsTab),
+        timerState: sanitizeTimerState(source.timerState),
+        stopwatchState: sanitizeStopwatchState(source.stopwatchState),
         appearance: sanitizeAppearance(source.appearance),
         bookmarks: sanitizeBookmarks(source.bookmarks),
         reminders: sanitizeReminders(source.reminders)
@@ -483,6 +490,13 @@ export async function loadConfig() {
         config = freshConfig();
         loadedForUser = meId;
     }
+    for (const listener of [...configLoadListeners]) {
+        try {
+            listener(config);
+        } catch (e) {
+            logger.error("Config load listener errored", e);
+        }
+    }
     emit();
 }
 
@@ -639,6 +653,85 @@ export function toggleWidgetCollapsed(id: WidgetId) {
     persist();
 }
 
+export function getEmptyBehaviour(id: WidgetId): WidgetEmptyBehaviour {
+    return config.widgetEmptyBehaviour[id] ?? "show";
+}
+
+export function setEmptyBehaviour(id: WidgetId, value: WidgetEmptyBehaviour) {
+    config.widgetEmptyBehaviour = sanitizeEmptyBehaviour({ ...config.widgetEmptyBehaviour, [id]: value });
+    emit();
+    persist();
+}
+
+export function getWidgetColumn(id: WidgetId): number {
+    return config.widgetColumns[id] ?? SEED_COLUMNS[id] ?? 0;
+}
+
+/** Unlike sanitizeWidgetColumns' seed-fallback for corrupted storage, a direct
+ *  call here is a computed value (a drop target, a keyboard move) - it just
+ *  needs its bounds respected, not to be thrown out wholesale. */
+export function setWidgetColumn(id: WidgetId, column: number) {
+    if (!WIDGET_IDS.includes(id)) return;
+    config.widgetColumns = { ...config.widgetColumns, [id]: clampNumber(column, 0, MAX_COLUMNS - 1, 0) };
+    emit();
+    persist();
+}
+
+/** Layout back to the registry's seeds: display order and column assignment
+ *  only. Everything else - pins, notes, hidden widgets, bookmarks, reminders,
+ *  the weather location - is content, not layout, and stays put. */
+export function resetLayout() {
+    config.widgetOrder = [...WIDGET_IDS];
+    config.widgetColumns = { ...SEED_COLUMNS };
+    emit();
+    persist();
+}
+
+/** Reset layout, plus unhides whatever starts visible by default - the
+ *  "start over" action, not just an arrangement undo. Still leaves pins,
+ *  notes, bookmarks, reminders and the weather location alone. */
+export function restoreDefaults() {
+    config.widgetOrder = [...WIDGET_IDS];
+    config.widgetColumns = { ...SEED_COLUMNS };
+    config.hiddenWidgets = [...DEFAULT_HIDDEN_WIDGETS];
+    emit();
+    persist();
+}
+
+export function getQuickToolsTab(): QuickToolId {
+    return config.quickToolsTab;
+}
+
+export function setQuickToolsTab(id: QuickToolId) {
+    config.quickToolsTab = sanitizeQuickToolsTab(id);
+    emit();
+    persist();
+}
+
+export function getTimerState(): PersistedTimerState {
+    return config.timerState;
+}
+
+/** Deliberately no emit(): nothing outside Quick Tools' own module-local
+ *  listeners reads timerState, and QuickTools.tsx only calls this at arm/
+ *  cancel - waking the whole useGlanceConfig() tree on every one of those
+ *  would be the exact per-render cost this split was built to avoid. */
+export function setTimerState(state: PersistedTimerState) {
+    config.timerState = sanitizeTimerState(state);
+    persist();
+}
+
+export function getStopwatchState(): PersistedStopwatchState {
+    return config.stopwatchState;
+}
+
+/** Same reasoning as setTimerState: called only at start/pause/reset, never
+ *  per tick, and never needs to wake anything outside Quick Tools itself. */
+export function setStopwatchState(state: PersistedStopwatchState) {
+    config.stopwatchState = sanitizeStopwatchState(state);
+    persist();
+}
+
 export function isGuildCollapsed(guildKey: string) {
     return config.collapsedGuilds.includes(guildKey);
 }
@@ -653,30 +746,60 @@ export function toggleGuildCollapsed(guildKey: string) {
     persist();
 }
 
-/** Replaces one group's ordering wholesale (drag & drop commit) */
-export function setGroupOrder(group: WidgetGroup, orderedIds: WidgetId[]) {
-    const valid = orderedIds.filter(id => WIDGET_META.find(m => m.id === id)?.group === group);
-    const others = config.widgetOrder.filter(id => WIDGET_META.find(m => m.id === id)?.group !== group);
+/** Replaces one column's ordering wholesale (drag & drop commit) */
+export function setColumnOrder(column: number, orderedIds: WidgetId[]) {
+    const valid = orderedIds.filter(id => getWidgetColumn(id) === column);
+    const others = config.widgetOrder.filter(id => getWidgetColumn(id) !== column);
     config.widgetOrder = sanitizeWidgetOrder([...valid, ...others]);
     emit();
     persist();
 }
 
-/** Moves a widget up/down within its own group's display order */
+/** Moves a widget up/down within its own column's display order */
 export function moveWidget(id: WidgetId, delta: -1 | 1) {
-    const group = WIDGET_META.find(w => w.id === id)?.group;
-    if (!group) return;
-
-    const groupIds = config.widgetOrder.filter(w =>
-        WIDGET_META.find(m => m.id === w)?.group === group
-    );
-    moveWithinSubset(config.widgetOrder, id, delta, groupIds);
+    // Column, not registry group. The group only seeds a first-run column now,
+    // so filtering by it would shuffle a widget past neighbours it no longer
+    // shares a column with.
+    const column = getWidgetColumn(id);
+    const columnIds = config.widgetOrder.filter(w => getWidgetColumn(w) === column);
+    moveWithinSubset(config.widgetOrder, id, delta, columnIds);
 }
 
-/** Widgets of a group in display order (hidden ones excluded) */
-export function useOrderedWidgets(group: WidgetGroup): WidgetId[] {
-    const { widgetOrder, hiddenWidgets } = useGlanceConfig();
-    return widgetOrder.filter(id =>
-        WIDGET_META.find(m => m.id === id)?.group === group && !hiddenWidgets.includes(id)
-    );
+/** Moves a widget to the column before (-1) or after (+1) its own, landing at
+ *  the end of that column's order - the keyboard equivalent of dragging it
+ *  across for anyone who cannot use a pointer. No-ops past the first/last column. */
+export function moveWidgetColumn(id: WidgetId, delta: -1 | 1) {
+    if (!WIDGET_IDS.includes(id)) return;
+    const current = getWidgetColumn(id);
+    const target = current + delta;
+    if (target < 0 || target > MAX_COLUMNS - 1) return;
+
+    setWidgetColumn(id, target);
+    const siblings = widgetsInColumn(target).filter(w => w !== id);
+    siblings.push(id);
+    setColumnOrder(target, siblings);
+}
+
+/** Widgets in a column, in display order (hidden ones excluded) */
+/**
+ * Visible widgets in a column, in order. Plain read, for callers that already
+ * subscribe to the config and cannot use a hook (a loop over columns).
+ *
+ * `renderedCount` folds assignments that do not fit the current width into the
+ * last visible column, so a narrow window shows everything rather than hiding
+ * whatever was parked on the right. This is a DISPLAY decision only: the stored
+ * assignment is never rewritten, or dragging the window narrow once would
+ * permanently flatten a layout the user built.
+ */
+export function widgetsInColumn(column: number, renderedCount = MAX_COLUMNS): WidgetId[] {
+    const last = Math.max(0, renderedCount - 1);
+    return config.widgetOrder.filter(id => {
+        if (config.hiddenWidgets.includes(id)) return false;
+        return Math.min(getWidgetColumn(id), last) === column;
+    });
+}
+
+export function useOrderedWidgets(column: number, renderedCount = MAX_COLUMNS): WidgetId[] {
+    useGlanceConfig();
+    return widgetsInColumn(column, renderedCount);
 }

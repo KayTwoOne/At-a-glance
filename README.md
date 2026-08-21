@@ -4,7 +4,7 @@
 
 **A customizable overview page for Discord, one tab above your Friends button.**
 
-[![Version](https://img.shields.io/badge/version-2.8.0-D33699?style=flat-square)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-3.0.0-D33699?style=flat-square)](CHANGELOG.md)
 [![Vencord](https://img.shields.io/badge/vencord%20%7C%20equicord-userplugin-9c85ef?style=flat-square)](https://vencord.dev)
 [![Discord](https://img.shields.io/badge/discord-stable-57F287?style=flat-square)](#install)
 [![License](https://img.shields.io/badge/license-GPL--3.0-blue?style=flat-square)](LICENSE)
@@ -26,14 +26,20 @@ message rendering, native pickers, native send pipeline.
   functionality: replies, reactions, inline editing, GIF/emoji/sticker pickers,
   `:emoji` and `@mention`/`@role` autocomplete, a formatting toolbar, native-style
   message grouping and a "new messages" bar when you're scrolled up.
-- **Everything is arrangeable.** Widgets drag between slots, friends drag into your
-  own order, server sections drag and collapse. All of it persists per account.
+- **A free layout.** Up to three columns, and any widget can drag into any of
+  them - the column a widget lands in is saved per account, not fixed by what
+  kind of widget it is. Friends drag into your own order, server sections drag
+  and collapse, all of it persisting the same way.
 - **Theme-proof and yours.** Surfaces and inks adapt to light and dark themes
   automatically, Nitro gradients included. Three materials (classic, acrylic, glass)
   and one-click colour presets (Nord, Dracula, Catppuccin and more) at subtle,
   tasteful intensities - the background is entirely yours to set, solid by default.
 - **Your nameplate, everywhere.** The bottom-left user area wraps your Nitro
   nameplate around the whole strip, fading up into the sidebar.
+- **Privacy blur.** One button in the top bar blurs pinned friends, server names
+  and your weather location for a screen share or a screenshot. Everything stays
+  clickable while it's on, and it clears itself when you close the dashboard.
+  Presentation cover rather than redaction - the text is still in the page.
 - **Honest security posture.** One webpack patch, one external host (Open-Meteo for
   weather), validated storage, no eval, no token access, no automated API activity.
   Re-audited at v2.6.3 with no security findings - details in [SECURITY.md](SECURITY.md).
@@ -42,14 +48,16 @@ message rendering, native pickers, native send pipeline.
 
 | Widget | What it does |
 | --- | --- |
-| **Pinned Friends** | Presence, live activity, DM mention badges. Click for quick chat; right-click for profile, call, notes, nicknames, block and more. Two per row, drag to reorder. |
+| **Pinned Friends** | Presence, live activity, DM mention badges, a pinned/active count in the header. Click for quick chat; right-click for profile, call, notes, nicknames, block and more. Two per row, drag to reorder; Show more beyond the first ten. |
 | **Inbox** | Two tabs: **Mentions** (Discord's recent-mentions inbox) and **Direct Messages** (every unread DM with avatar, preview and badge). Mark all read per tab. |
-| **Quick Access Channels** | Watched channels grouped per server with collapsible headers that carry their own mention badge / unread dot. Voice rows show live occupants; double-click joins. A pinned group DM opens its chat on click and starts (or joins) the call on double-click; Enter/Space still expands the row to see who's in the call. |
-| **Quick chat popup** | The centred chat card described above. Per-channel scroll memory, unread NEW divider, viewing acks the channel like a real view. |
-| **Quick Tools** | Clock with extra timezones, stopwatch, countdown, calculator, and a `<t:…>` timestamp builder with live preview. |
-| **Integrations & Notes** | Open-Meteo weather, Spotify now-playing (read-only, local), and structured notes with bullets, clickable todos and dividers. |
+| **Quick Access Channels** | Watched channels grouped per server with collapsible headers that carry their own mention badge / unread dot, text channels listed above voice. Voice rows show live occupants while collapsed; double-click joins. Pinned group DMs get their own avatar; opening its chat is a click, starting (or joining) the call is a double-click, and Enter/Space still expands the row to see who's in the call. |
+| **Quick chat popup** | The centred chat card described above. Quick reactions drawn from your own emoji, clicking a reply jumps straight to it, per-channel scroll memory, unread NEW divider, viewing acks the channel like a real view. |
+| **Quick Tools** | One tab at a time: Clock (add and manage world clock zones right in the tab), Timer (hours/minutes/seconds, survives a restart), Stopwatch (laps, survives a restart), Calculator, and Timestamp builder. Remembers your last tool. |
+| **Weather** | Open-Meteo weather with location search, 4-day forecast, your own refresh interval and a last-updated line. |
+| **Now Playing** | Read-only listening status from Discord's local store, following any music platform Discord can see a listening activity for (not just Spotify). Hides itself by default when nothing is playing. |
+| **Quick Notes** | Structured notes with bullets, clickable checkboxes and dividers. |
 | **Events** | Upcoming scheduled events rolled up per server, with RSVP and one-click join when live. |
-| **Saved Messages** | Bookmark any message; click jumps straight to it, highlighted, in its channel. |
+| **Saved Messages** | Bookmark any message; click jumps straight to it, highlighted, in its channel. Header shows a count. |
 | **Client Performance** | Renderer JS-heap and UI latency. Only metrics the renderer can honestly measure. |
 | **Orion** _(optional, off by default)_ | Remote control for the separate OrionQuests plugin: status pill, Start / Stop / Status buttons, live per-quest progress. Enable it under **Add Widget**; inert unless OrionQuests is also installed. |
 

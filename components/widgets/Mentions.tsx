@@ -28,9 +28,12 @@ import { WidgetCard } from "../WidgetCard";
 const logger = new Logger("AtAGlance");
 
 // Pulls a channel's newest message into MessageStore so the DM preview is the
-// real latest, not a stale cached one
-const MessageFetchActions = findByPropsLazy("fetchMessages", "jumpToMessage") as {
+// real latest, not a stale cached one. Exported so other files needing the
+// same module (the popup's reply-jump, for one) reuse this lookup instead of
+// declaring their own copy of the same findByPropsLazy call.
+export const MessageFetchActions = findByPropsLazy("fetchMessages", "jumpToMessage") as {
     fetchMessages(options: { channelId: string; limit?: number; }): Promise<unknown>;
+    jumpToMessage(options: { channelId: string; messageId: string; flash?: boolean; jumpType?: string; }): void;
 };
 
 const MAX_SHOWN = 15;

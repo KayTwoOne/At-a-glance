@@ -6,6 +6,7 @@
 
 import { React, ReactDOM } from "@webpack/common";
 
+import { useOnLightTheme } from "./appearance";
 import { ChevronIcon } from "./icons";
 
 export interface DropdownOption {
@@ -31,6 +32,10 @@ interface DropdownProps {
  * off-screen. The portal escapes every ancestor transform/overflow.
  */
 export function Dropdown({ options, value, onChange, ariaLabel, className }: DropdownProps) {
+    // The menu is portaled past .vc-glance-layer's DOM subtree (see below), so
+    // it can't inherit .vc-glance-on-light from an ancestor the way the
+    // trigger does - it needs its own light-theme read to match.
+    const onLightTheme = useOnLightTheme();
     const [open, setOpen] = React.useState(false);
     const [activeIndex, setActiveIndex] = React.useState(0);
     const [rect, setRect] = React.useState<{ top: number; left: number; width: number; } | null>(null);
@@ -102,7 +107,7 @@ export function Dropdown({ options, value, onChange, ariaLabel, className }: Dro
     const menu = open && rect && (
         <div
             ref={menuRef}
-            className="vc-glance-dropdown-menu"
+            className={"vc-glance-dropdown-menu" + (onLightTheme ? " vc-glance-on-light" : "")}
             role="listbox"
             style={{ top: rect.top, left: rect.left, width: rect.width }}
         >

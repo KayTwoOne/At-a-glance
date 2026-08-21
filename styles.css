@@ -5,6 +5,67 @@
    UI stays legible over Nitro theme gradients.
    ======================================================================== */
 
+/* ========================================================================
+   Semantic tokens (--vcg-t-*) - every one is a Discord variable with a
+   plugin-owned fallback, so a custom theme that drops the variable degrades
+   instead of breaking. Separate from --vcg-primary/--vcg-accent/etc, which
+   are the user's own appearance-panel colours and are set inline per render
+   (see appearance.ts) rather than declared here.
+   Declared on every plugin root - .vc-glance-layer (the dashboard),
+   .vc-glance-popup-backdrop (the channel popup, portalled to document.body
+   and so outside .vc-glance-layer's cascade), and .vc-glance-dropdown-menu
+   (the themed <select> replacement, also portalled to document.body for its
+   own reasons - see Dropdown.tsx) - so all three resolve the tokens instead
+   of silently falling through to nothing.
+   ======================================================================== */
+.vc-glance-layer,
+.vc-glance-popup-backdrop,
+.vc-glance-dropdown-menu {
+    /* Page + surfaces, back to front */
+    --vcg-t-bg-page: var(--custom-theme-background, var(--background-base-low, var(--background-primary, #26262b)));
+    --vcg-t-surface-widget: var(--background-mod-subtle, var(--background-secondary, #2b2d31));
+    --vcg-t-surface-elevated: var(--background-base-low, var(--background-primary, #26262b));
+    --vcg-t-surface-row: var(--background-mod-strong, var(--background-tertiary, #1e1f22));
+    --vcg-t-surface-input: var(--background-mod-subtle, var(--background-secondary, #1e1f22));
+    --vcg-t-hover: var(--interactive-background-hover, rgb(255 255 255 / 6%));
+    --vcg-t-selected: var(--interactive-background-selected, var(--interactive-background-active, rgb(255 255 255 / 8%)));
+
+    /* Lines */
+    --vcg-t-border: var(--border-subtle, transparent);
+    --vcg-t-divider: var(--border-subtle, rgb(255 255 255 / 6%));
+
+    /* Text */
+    --vcg-t-text-primary: var(--text-default, #dbdee1);
+    --vcg-t-text-secondary: var(--text-muted, #949ba4);
+    --vcg-t-text-muted: var(--interactive-muted, #4e5058);
+
+    /* Interactive + status */
+    --vcg-t-focus: var(--focus-primary, #00a8fc);
+    --vcg-t-action-primary: var(--brand-500, #5865f2);
+    --vcg-t-success: var(--status-positive, #23a55a);
+    --vcg-t-warning: var(--status-warning, #f0b232);
+    --vcg-t-danger: var(--status-danger, #f23f43);
+    --vcg-t-info: var(--status-info, #00a8fc);
+
+    /* Shape */
+    --vcg-t-radius-widget: var(--radius-md, 12px);
+    --vcg-t-radius-row: var(--radius-sm, 8px);
+    --vcg-t-radius-control: var(--radius-sm, 6px);
+
+    /* Spacing scale */
+    --vcg-t-space-xs: var(--space-4, 4px);
+    --vcg-t-space-sm: var(--space-8, 8px);
+    --vcg-t-space-md: var(--space-12, 12px);
+    --vcg-t-space-lg: var(--space-16, 16px);
+    --vcg-t-space-xl: var(--space-24, 24px);
+
+    /* Motion - not Discord-sourced (the client has no public per-widget
+       duration variable), kept in var() form anyway so the two tiers stay
+       consistent with the rest of this block and overridable the same way */
+    --vcg-t-duration-fast: var(--transition-duration-fast, 0.12s);
+    --vcg-t-duration-normal: var(--transition-duration-normal, 0.2s);
+}
+
 /* ========== Sidebar tab (mirrors Friends/Shop/Quests rows) ========== */
 
 .vc-glance-tab {
@@ -19,7 +80,7 @@
     align-items: center;
     gap: 12px;
     padding: var(--space-8, 8px) var(--space-16, 16px) var(--space-8, 8px) 12px;
-    border-radius: var(--radius-sm, 8px);
+    border-radius: var(--vcg-t-radius-row);
     color: var(--interactive-text-default, var(--channels-default, #949ba4));
     cursor: pointer;
 }
@@ -36,7 +97,7 @@
 
 .vc-glance-tab-pill:active,
 .vc-glance-tab-selected {
-    background: var(--interactive-background-selected, var(--interactive-background-active, rgb(255 255 255 / 8%)));
+    background: var(--vcg-t-selected);
     color: var(--text-default, var(--interactive-active, #fff));
 }
 
@@ -66,6 +127,14 @@
        grabbed through the page; still below Discord's popouts/modals/titlebar */
     z-index: 150;
     display: flex;
+
+    /* Set inline (GlanceLayer's watchThemeEditor) when Discord's own theme
+       editor is docked alongside us, so the workspace reflows beside it
+       instead of sitting underneath it. Eased rather than snapped so the
+       panel opening/closing doesn't read as a layout jump. --vcg-t-duration-normal
+       isn't in scope here (it's declared on .vc-glance-layer, a CHILD of this
+       element, not an ancestor) so the fallback is the real value, not decoration. */
+    transition: right var(--transition-duration-normal, 0.2s) ease;
 }
 
 .vc-glance-layer {
@@ -73,13 +142,36 @@
     flex: 1;
     display: flex;
     min-width: 0;
-    background: var(--custom-theme-background, var(--background-base-low, var(--background-primary, #26262b)));
+    background: var(--vcg-t-bg-page);
     color: var(--text-default, var(--text-normal, #dbdee1));
-    border-left: 1px solid var(--border-subtle, transparent);
-    border-top: 1px solid var(--border-subtle, transparent);
+    border-left: 1px solid var(--vcg-t-border);
+    border-top: 1px solid var(--vcg-t-border);
     /* Matches the rounded page-corner of Discord's visual refresh */
     border-top-left-radius: var(--radius-md, 8px);
     overflow: hidden;
+}
+
+/* The rail this sits next to hides Discord's own bottom-left user panel
+   under RailUserStrip (see visibility:hidden on [class^="panels_"] further
+   down) - that panel's own chrome doesn't go away, only its paint does, so
+   whatever the rail draws behind it keeps showing through and it runs
+   lighter than the plain icon rail above it. A flat border can't track that
+   climb, so it reads as a hard, worsening seam toward the bottom. This
+   doesn't chase the rail's exact curve (that would fight "distinct, not
+   matching") - it just lets the seam itself warm up gradually so the two
+   surfaces hand off instead of butting against each other. Sits inside the
+   border, in the padding gutter every child already leaves at the edge, so
+   it never overlaps real content. */
+.vc-glance-layer::before {
+    content: "";
+    position: absolute;
+    inset: 0 auto 0 0;
+    width: 2px;
+    background: linear-gradient(to bottom,
+        transparent 0%,
+        transparent 55%,
+        color-mix(in srgb, var(--vcg-t-hover) 65%, var(--vcg-t-border)) 100%);
+    pointer-events: none;
 }
 
 /* Blanks the native toolbar's channel contents while open (bar itself stays
@@ -116,17 +208,17 @@
     padding: 6px 10px;
     margin-left: -6px;
     border: none;
-    border-radius: var(--radius-sm, 8px);
+    border-radius: var(--vcg-t-radius-row);
     background: transparent;
     cursor: pointer;
 }
 
 .vc-glance-topbar-back:hover {
-    background: var(--interactive-background-hover, rgb(255 255 255 / 6%));
+    background: var(--vcg-t-hover);
 }
 
 .vc-glance-topbar-back:hover .vc-glance-topbar-icon {
-    color: var(--text-default, #f2f3f5);
+    color: var(--vcg-t-text-primary);
 }
 
 .vc-glance-topbar-icon {
@@ -136,7 +228,7 @@
 .vc-glance-topbar-title {
     font-size: 16px;
     font-weight: 600;
-    color: var(--text-default, #f2f3f5);
+    color: var(--vcg-t-text-primary);
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -162,6 +254,9 @@
     padding: 20px 24px 48px;
 }
 
+/* Track count follows however many columns actually hold widgets, so an unused
+   third column costs nothing until something is moved into it. The two-column
+   ratio is preserved deliberately: it is the shape everyone already has. */
 .vc-glance-workspace {
     display: grid;
     grid-template-columns: minmax(400px, 5fr) minmax(340px, 4fr);
@@ -169,25 +264,38 @@
     align-items: start;
 }
 
-@media (max-width: 1100px) {
-    .vc-glance-workspace {
-        grid-template-columns: 1fr;
-    }
+.vc-glance-workspace[data-columns="1"] {
+    grid-template-columns: minmax(0, 1fr);
 }
+
+.vc-glance-workspace[data-columns="3"] {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+/* No media query here on purpose. data-columns is set from a measurement of
+   this container, so it already knows the real available width; a viewport
+   media query would be a second, less accurate opinion fighting the first. */
 
 /* Widgets fade+rise in with a gentle stagger when the view opens */
 .vc-glance-widget-slot {
     animation: vc-glance-widget-in 0.4s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
-.vc-glance-column-social .vc-glance-widget-slot:nth-child(2) { animation-delay: 0.04s; }
-.vc-glance-column-social .vc-glance-widget-slot:nth-child(3) { animation-delay: 0.08s; }
-.vc-glance-column-social .vc-glance-widget-slot:nth-child(4) { animation-delay: 0.12s; }
-.vc-glance-column-social .vc-glance-widget-slot:nth-child(5) { animation-delay: 0.16s; }
-.vc-glance-column-tools .vc-glance-widget-slot:nth-child(2) { animation-delay: 0.06s; }
-.vc-glance-column-tools .vc-glance-widget-slot:nth-child(3) { animation-delay: 0.1s; }
-.vc-glance-column-tools .vc-glance-widget-slot:nth-child(4) { animation-delay: 0.14s; }
-.vc-glance-column-tools .vc-glance-widget-slot:nth-child(5) { animation-delay: 0.18s; }
+/* A hidden or "hide when empty" widget renders null, leaving a genuinely
+   childless wrapper. :empty pulls it out of the flex flow entirely so
+   .vc-glance-column stops allocating a gap for a widget that isn't there. */
+.vc-glance-widget-slot:empty {
+    display: none;
+}
+
+.vc-glance-column-0 .vc-glance-widget-slot:nth-child(2) { animation-delay: 0.04s; }
+.vc-glance-column-0 .vc-glance-widget-slot:nth-child(3) { animation-delay: 0.08s; }
+.vc-glance-column-0 .vc-glance-widget-slot:nth-child(4) { animation-delay: 0.12s; }
+.vc-glance-column-0 .vc-glance-widget-slot:nth-child(5) { animation-delay: 0.16s; }
+.vc-glance-column-1 .vc-glance-widget-slot:nth-child(2) { animation-delay: 0.06s; }
+.vc-glance-column-1 .vc-glance-widget-slot:nth-child(3) { animation-delay: 0.1s; }
+.vc-glance-column-1 .vc-glance-widget-slot:nth-child(4) { animation-delay: 0.14s; }
+.vc-glance-column-1 .vc-glance-widget-slot:nth-child(5) { animation-delay: 0.18s; }
 
 @keyframes vc-glance-widget-in {
     from {
@@ -218,7 +326,7 @@ body.vc-glance-dragging .vc-glance-widget-slot {
     margin-bottom: 22px;
     padding: 22px 24px;
     border-radius: var(--radius-md, 16px);
-    border: 1px solid var(--border-subtle, transparent);
+    border: 1px solid var(--vcg-t-border);
     background: var(--background-mod-subtle, rgb(255 255 255 / 3%));
     overflow: hidden;
     animation: vc-glance-widget-in 0.5s cubic-bezier(0.22, 1, 0.36, 1) both;
@@ -264,7 +372,7 @@ body.vc-glance-dragging .vc-glance-widget-slot {
     margin: 0;
     font-size: 26px;
     font-weight: 700;
-    color: var(--text-default, #f2f3f5);
+    color: var(--vcg-t-text-primary);
     letter-spacing: -0.01em;
 }
 
@@ -287,7 +395,7 @@ body.vc-glance-dragging .vc-glance-widget-slot {
     display: block;
     margin: 4px 0 0;
     font-size: 14px;
-    color: var(--text-muted, #949ba4);
+    color: var(--vcg-t-text-secondary);
 }
 
 /* The summary is only a <button> once there's a panel behind it to open -
@@ -303,11 +411,11 @@ button.vc-glance-hero-summary {
 }
 
 button.vc-glance-hero-summary:hover {
-    color: var(--text-default, #dbdee1);
+    color: var(--vcg-t-text-primary);
 }
 
 .vc-glance-hero-summary-active {
-    color: var(--text-default, #dbdee1);
+    color: var(--vcg-t-text-primary);
     font-weight: 500;
 }
 
@@ -318,8 +426,8 @@ button.vc-glance-hero-summary:hover {
     margin: 12px 0 22px;
     padding: 6px;
     border-radius: var(--radius-md, 16px);
-    border: 1px solid var(--border-subtle, transparent);
-    background: var(--background-mod-subtle, var(--background-secondary, #2b2d31));
+    border: 1px solid var(--vcg-t-border);
+    background: var(--vcg-t-surface-widget);
     max-height: 360px;
     overflow-y: auto;
     position: relative;
@@ -337,7 +445,7 @@ button.vc-glance-hero-summary:hover {
 }
 
 .vc-glance-hero-notifs-section + .vc-glance-hero-notifs-section {
-    border-top: 1px solid var(--border-subtle, rgb(255 255 255 / 6%));
+    border-top: 1px solid var(--vcg-t-divider);
 }
 
 .vc-glance-hero-notifs-row {
@@ -346,7 +454,7 @@ button.vc-glance-hero-summary:hover {
 
 .vc-glance-hero-notifs-more {
     padding: 6px 10px 2px;
-    color: var(--text-muted, #949ba4);
+    color: var(--vcg-t-text-secondary);
     font-size: 12px;
 }
 
@@ -354,7 +462,7 @@ button.vc-glance-hero-summary:hover {
     display: flex;
     justify-content: flex-end;
     padding: 8px 6px 4px;
-    border-top: 1px solid var(--border-subtle, rgb(255 255 255 / 6%));
+    border-top: 1px solid var(--vcg-t-divider);
 }
 
 .vc-glance-hero-side {
@@ -374,12 +482,12 @@ button.vc-glance-hero-summary:hover {
     font-size: 24px;
     font-weight: 700;
     font-variant-numeric: tabular-nums;
-    color: var(--text-default, #f2f3f5);
+    color: var(--vcg-t-text-primary);
 }
 
 .vc-glance-hero-date {
     font-size: 12px;
-    color: var(--text-muted, #949ba4);
+    color: var(--vcg-t-text-secondary);
 }
 
 .vc-glance-hero-search {
@@ -388,17 +496,17 @@ button.vc-glance-hero-summary:hover {
     gap: 10px;
     padding: 8px 12px;
     border: 1px solid var(--border-subtle, rgb(255 255 255 / 8%));
-    border-radius: var(--radius-sm, 8px);
+    border-radius: var(--vcg-t-radius-row);
     background: var(--background-mod-strong, rgb(0 0 0 / 25%));
-    color: var(--text-muted, #949ba4);
+    color: var(--vcg-t-text-secondary);
     font-size: 13px;
     cursor: pointer;
     transition: border-color 0.15s ease, color 0.15s ease;
 }
 
 .vc-glance-hero-search:hover {
-    border-color: var(--brand-500, #5865f2);
-    color: var(--text-default, #dbdee1);
+    border-color: var(--vcg-t-action-primary);
+    color: var(--vcg-t-text-primary);
 }
 
 /* ========== Command palette ========== */
@@ -418,9 +526,9 @@ button.vc-glance-hero-summary:hover {
 
 .vc-glance-palette {
     width: min(560px, 90%);
-    border-radius: var(--radius-md, 12px);
+    border-radius: var(--vcg-t-radius-widget);
     border: 1px solid var(--border-subtle, rgb(255 255 255 / 8%));
-    background: var(--background-base-low, var(--background-primary, #26262b));
+    background: var(--vcg-t-surface-elevated);
     box-shadow: 0 24px 60px rgb(0 0 0 / 55%);
     overflow: hidden;
     animation: vc-glance-palette-in 0.16s cubic-bezier(0.22, 1, 0.36, 1);
@@ -455,7 +563,7 @@ button.vc-glance-hero-summary:hover {
     align-items: center;
     gap: 8px;
     padding: 4px 12px;
-    border-bottom: 1px solid var(--border-subtle, rgb(255 255 255 / 6%));
+    border-bottom: 1px solid var(--vcg-t-divider);
 }
 
 .vc-glance-palette-input {
@@ -463,7 +571,7 @@ button.vc-glance-hero-summary:hover {
     padding: 14px 0;
     border: none;
     background: none;
-    color: var(--text-default, #f2f3f5);
+    color: var(--vcg-t-text-primary);
     font-size: 16px;
     outline: none;
 }
@@ -474,7 +582,7 @@ button.vc-glance-hero-summary:hover {
     border-radius: 4px;
     border: 1px solid var(--border-subtle, rgb(255 255 255 / 12%));
     background: var(--background-mod-subtle, rgb(255 255 255 / 6%));
-    color: var(--text-muted, #949ba4);
+    color: var(--vcg-t-text-secondary);
     font-size: 11px;
     font-family: inherit;
 }
@@ -488,7 +596,7 @@ button.vc-glance-hero-summary:hover {
 .vc-glance-palette-empty {
     padding: 20px;
     text-align: center;
-    color: var(--text-muted, #949ba4);
+    color: var(--vcg-t-text-secondary);
     font-size: 14px;
 }
 
@@ -499,15 +607,15 @@ button.vc-glance-hero-summary:hover {
     width: 100%;
     padding: 10px 12px;
     border: none;
-    border-radius: var(--radius-sm, 8px);
+    border-radius: var(--vcg-t-radius-row);
     background: transparent;
-    color: var(--text-default, #dbdee1);
+    color: var(--vcg-t-text-primary);
     text-align: left;
     cursor: pointer;
 }
 
 .vc-glance-palette-item-active {
-    background: var(--brand-500, #5865f2);
+    background: var(--vcg-t-action-primary);
     color: #fff;
 }
 
@@ -555,17 +663,17 @@ button.vc-glance-hero-summary:hover {
     box-sizing: border-box;
     width: 100%;
     padding: 8px 10px;
-    border: 1px solid var(--border-subtle, transparent);
-    border-radius: var(--radius-sm, 8px);
-    background: var(--background-mod-subtle, var(--background-secondary, #1e1f22));
-    color: var(--text-default, #dbdee1);
+    border: 1px solid var(--vcg-t-border);
+    border-radius: var(--vcg-t-radius-row);
+    background: var(--vcg-t-surface-input);
+    color: var(--vcg-t-text-primary);
     font-size: 14px;
     cursor: pointer;
 }
 
 .vc-glance-dropdown:focus .vc-glance-dropdown-trigger,
 .vc-glance-dropdown-trigger:hover {
-    border-color: var(--brand-500, #5865f2);
+    border-color: var(--vcg-t-action-primary);
 }
 
 .vc-glance-dropdown-value {
@@ -592,7 +700,7 @@ button.vc-glance-hero-summary:hover {
        widgets below */
     z-index: 1000;
     padding: 4px;
-    border-radius: var(--radius-sm, 8px);
+    border-radius: var(--vcg-t-radius-row);
     border: 1px solid var(--border-subtle, rgb(255 255 255 / 8%));
     background: var(--background-base-lower, var(--background-floating, #111214));
     box-shadow: 0 8px 24px rgb(0 0 0 / 45%);
@@ -608,7 +716,7 @@ button.vc-glance-hero-summary:hover {
     border: none;
     border-radius: 6px;
     background: transparent;
-    color: var(--text-default, #dbdee1);
+    color: var(--vcg-t-text-primary);
     font-size: 14px;
     text-align: left;
     cursor: pointer;
@@ -625,7 +733,7 @@ button.vc-glance-hero-summary:hover {
 
 .vc-glance-dropdown-item-selected.vc-glance-dropdown-item-active,
 .vc-glance-dropdown-item-active.vc-glance-dropdown-item-selected {
-    background: var(--brand-500, #5865f2);
+    background: var(--vcg-t-action-primary);
     color: #fff;
 }
 
@@ -644,13 +752,16 @@ button.vc-glance-hero-summary:hover {
     align-items: center;
     gap: 3px;
     padding: 8px 4px;
-    border-radius: var(--radius-sm, 6px);
-    background: var(--background-mod-subtle, rgb(255 255 255 / 4%));
+    border-radius: var(--vcg-t-radius-control);
+    /* A real row surface, not a near-invisible 4% white wash - the 11px label
+       and the low-temp figure are both --vcg-t-text-secondary, and the old
+       wash lightened the background just enough to drop them under AA */
+    background: var(--vcg-t-surface-row);
 }
 
 .vc-glance-forecast-label {
     font-size: 11px;
-    color: var(--text-muted, #949ba4);
+    color: var(--vcg-t-text-secondary);
 }
 
 .vc-glance-forecast-emoji {
@@ -666,12 +777,29 @@ button.vc-glance-hero-summary:hover {
 }
 
 .vc-glance-forecast-hi {
-    color: var(--text-default, #dbdee1);
+    color: var(--vcg-t-text-primary);
     font-weight: 600;
 }
 
 .vc-glance-forecast-lo {
-    color: var(--text-muted, #949ba4);
+    color: var(--vcg-t-text-secondary);
+}
+
+/* Four days at flex:1 squash into unreadable slivers well before the row runs
+   out of room entirely - dropping the trailing day(s) keeps the ones left
+   wide enough to read, rather than shrinking all of them in step. Same column
+   container as the friends grid above, so this reacts to wherever the Weather
+   card is actually sitting. */
+@container vc-glance-column (max-width: 480px) {
+    .vc-glance-forecast-day:nth-child(n+4) {
+        display: none;
+    }
+}
+
+@container vc-glance-column (max-width: 340px) {
+    .vc-glance-forecast-day:nth-child(n+3) {
+        display: none;
+    }
 }
 
 .vc-glance-column {
@@ -679,23 +807,22 @@ button.vc-glance-hero-summary:hover {
     flex-direction: column;
     gap: 14px;
     min-width: 0;
-}
 
-.vc-glance-column-label {
-    margin: 0;
-    font-size: 12px;
-    font-weight: 700;
-    letter-spacing: 0.02em;
-    text-transform: uppercase;
-    color: var(--text-muted, #949ba4);
+    /* A widget can land in any column via drag, so it has to size itself off
+       the column that actually holds it, not the viewport - a media query
+       has no way to know that. Named so a widget's own query is explicit
+       about which ancestor it means, rather than matching whatever inline-size
+       container happens to be nearest. */
+    container-name: vc-glance-column;
+    container-type: inline-size;
 }
 
 /* ========== Widget cards ========== */
 
 .vc-glance-card {
-    background: var(--background-mod-subtle, var(--background-secondary, #2b2d31));
-    border: 1px solid var(--border-subtle, transparent);
-    border-radius: var(--radius-md, 12px);
+    background: var(--vcg-t-surface-widget);
+    border: 1px solid var(--vcg-t-border);
+    border-radius: var(--vcg-t-radius-widget);
 }
 
 .vc-glance-card-header {
@@ -716,14 +843,14 @@ button.vc-glance-hero-summary:hover {
     width: 24px;
     height: 24px;
     border: none;
-    border-radius: var(--radius-sm, 6px);
+    border-radius: var(--vcg-t-radius-control);
     background: transparent;
     color: var(--icon-muted, #80848e);
     cursor: pointer;
 }
 
 .vc-glance-card-collapse:hover {
-    color: var(--text-default, #dbdee1);
+    color: var(--vcg-t-text-primary);
 }
 
 .vc-glance-card-grip {
@@ -733,15 +860,15 @@ button.vc-glance-hero-summary:hover {
     flex-shrink: 0;
     width: 20px;
     height: 24px;
-    border-radius: var(--radius-sm, 6px);
+    border-radius: var(--vcg-t-radius-control);
     color: var(--icon-muted, #80848e);
     cursor: grab;
     touch-action: none;
 }
 
 .vc-glance-card-grip:hover {
-    color: var(--text-default, #dbdee1);
-    background: var(--interactive-background-hover, rgb(255 255 255 / 6%));
+    color: var(--vcg-t-text-primary);
+    background: var(--vcg-t-hover);
 }
 
 /* ========== Drag & drop ========== */
@@ -759,7 +886,19 @@ body.vc-glance-dragging * {
 /* Where the widget came from / will land - the dotted outline */
 .vc-glance-drop-slot {
     border: 2px dashed var(--border-strong, rgb(255 255 255 / 20%));
-    border-radius: var(--radius-md, 12px);
+    border-radius: var(--vcg-t-radius-widget);
+    background: var(--background-mod-subtle, rgb(255 255 255 / 3%));
+    box-sizing: border-box;
+}
+
+/* A column with nothing in it collapses to zero height, which makes it an
+   invisible target: you cannot aim at a column you cannot see. While a drag is
+   running, give an empty column the same dashed outline the drop slot uses so
+   the spare column is somewhere real to aim at. */
+body.vc-glance-dragging .vc-glance-column:empty {
+    min-height: 120px;
+    border: 2px dashed var(--border-strong, rgb(255 255 255 / 20%));
+    border-radius: var(--vcg-t-radius-widget);
     background: var(--background-mod-subtle, rgb(255 255 255 / 3%));
     box-sizing: border-box;
 }
@@ -771,7 +910,7 @@ body.vc-glance-dragging * {
     opacity: 0.95;
     transform: rotate(1.2deg) scale(1.01);
     box-shadow: 0 16px 40px rgb(0 0 0 / 50%);
-    border-radius: var(--radius-md, 12px);
+    border-radius: var(--vcg-t-radius-widget);
 }
 
 .vc-glance-drag-ghost.vc-glance-no-motion {
@@ -799,18 +938,50 @@ body.vc-glance-dragging * {
     }
 }
 
-.vc-glance-card-title {
+/* currentColor, so it always matches the title text next to it rather than
+   carrying its own colour that a custom theme could push toward invisible */
+.vc-glance-card-icon {
+    flex-shrink: 0;
+    color: var(--vcg-t-text-primary);
+}
+
+/* Title stays at its own content width and never gets squeezed; the
+   instance-supplied summary next to it absorbs the truncation instead, since
+   the summary is the part that varies in length. */
+.vc-glance-card-heading {
+    display: flex;
+    align-items: baseline;
     flex: 1;
     min-width: 0;
+    gap: var(--vcg-t-space-xs);
+    overflow: hidden;
+}
+
+.vc-glance-card-title {
+    flex-shrink: 0;
     margin: 0;
     font-size: 16px;
     font-weight: 600;
-    color: var(--text-default, #f2f3f5);
+    color: var(--vcg-t-text-primary);
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
     cursor: pointer;
     user-select: none;
+}
+
+.vc-glance-card-summary {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 12px;
+    color: var(--vcg-t-text-secondary);
+}
+
+.vc-glance-card-indicator {
+    flex-shrink: 0;
 }
 
 .vc-glance-card-actions {
@@ -823,25 +994,10 @@ body.vc-glance-dragging * {
     padding: 0 12px 12px;
 }
 
-.vc-glance-subcard {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-    padding: 12px;
-    border-radius: var(--radius-sm, 8px);
-    background: var(--background-mod-strong, var(--background-tertiary, #1e1f22));
-}
-
-.vc-glance-subcard-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-}
-
 .vc-glance-subcard-title {
     font-size: 13px;
     font-weight: 600;
-    color: var(--text-muted, #949ba4);
+    color: var(--vcg-t-text-secondary);
 }
 
 .vc-glance-stack {
@@ -850,19 +1006,36 @@ body.vc-glance-dragging * {
     gap: 10px;
 }
 
+/* An empty widget is telling you something, not waiting for input. The old
+   sunken dark fill read as a greyed-out text field, so people saw a broken
+   control instead of an explanation. A dashed outline says "nothing here yet"
+   without impersonating a form. */
 .vc-glance-empty {
-    padding: 14px;
-    border-radius: var(--radius-sm, 8px);
-    background: var(--background-mod-strong, rgb(0 0 0 / 30%));
-    color: var(--text-muted, #949ba4);
+    padding: 18px 14px;
+    border: 1px dashed var(--vcg-t-border);
+    border-radius: var(--vcg-t-radius-row);
+    background: transparent;
+    color: var(--vcg-t-text-secondary);
     font-size: 13px;
-    line-height: 1.45;
+    line-height: 1.5;
+    text-align: center;
+}
+
+.vc-glance-empty strong {
+    color: var(--vcg-t-text-primary);
+    font-weight: 600;
 }
 
 .vc-glance-hint {
-    color: var(--text-muted, #949ba4);
+    color: var(--vcg-t-text-secondary);
     font-size: 12px;
     line-height: 1.4;
+}
+
+/* Same shape as .vc-glance-hint, danger-coloured - for validation feedback
+   that has to be read, not just glanced past. */
+.vc-glance-hint-error {
+    color: var(--vcg-t-danger);
 }
 
 /* ========== Shared list rows ========== */
@@ -878,13 +1051,13 @@ body.vc-glance-dragging * {
     align-items: center;
     gap: 10px;
     padding: 8px 10px;
-    border-radius: var(--radius-sm, 8px);
-    background: var(--background-mod-strong, var(--background-tertiary, #1e1f22));
+    border-radius: var(--vcg-t-radius-row);
+    background: var(--vcg-t-surface-row);
     cursor: pointer;
 }
 
 .vc-glance-row:hover {
-    background: var(--interactive-background-hover, rgb(255 255 255 / 6%));
+    background: var(--vcg-t-hover);
 }
 
 .vc-glance-row-offline,
@@ -902,7 +1075,7 @@ body.vc-glance-dragging * {
 .vc-glance-row-title {
     font-size: 15px;
     font-weight: 500;
-    color: var(--text-default, #dbdee1);
+    color: var(--vcg-t-text-primary);
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -910,7 +1083,7 @@ body.vc-glance-dragging * {
 
 .vc-glance-row-subtitle {
     font-size: 12px;
-    color: var(--text-muted, #949ba4);
+    color: var(--vcg-t-text-secondary);
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -938,6 +1111,18 @@ body.vc-glance-dragging * {
     gap: 6px;
 }
 
+/* Below this the two tiles have too little room each for the avatar, name and
+   the row of action icons to coexist without truncating everything - one tile
+   per row keeps every element legible instead of squeezing the grid. Queries
+   the COLUMN the widget is actually sitting in (see .vc-glance-column above),
+   so this fires the same whether the width comes from a narrow window or from
+   being dragged into a tighter column at a wide one. */
+@container vc-glance-column (max-width: 480px) {
+    .vc-glance-friends-tiles {
+        grid-template-columns: minmax(0, 1fr);
+    }
+}
+
 /* min-width:0 lets the name/activity text ellipsize inside the half-width cell
    instead of blowing the column open */
 .vc-glance-friend-cell,
@@ -945,23 +1130,51 @@ body.vc-glance-dragging * {
     min-width: 0;
 }
 
-.vc-glance-friend-tile .vc-glance-icon-button {
-    width: 28px;
-    height: 28px;
+/* The friend tile used to shrink these; it now matches the shared size, so the
+   override only existed to restate the default. */
+
+/* Reveals the tiles past the cap. Full width below the grid rather than a
+   corner link, since it stands for the whole hidden row count, not one row. */
+.vc-glance-show-more {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--vcg-t-space-xs);
+    width: 100%;
+    min-height: 32px;
+    margin-top: var(--vcg-t-space-xs);
+    padding: var(--vcg-t-space-xs) var(--vcg-t-space-sm);
+    border: none;
+    border-radius: var(--vcg-t-radius-row);
+    background: transparent;
+    color: var(--vcg-t-text-secondary);
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+}
+
+.vc-glance-show-more:hover {
+    background: var(--vcg-t-hover);
+    color: var(--vcg-t-text-primary);
+}
+
+.vc-glance-show-more:focus-visible {
+    outline: 2px solid var(--vcg-t-focus);
+    outline-offset: 1px;
 }
 
 /* ---- Row drag & drop (friends / server sections): the widget-drag look at
    row scale - dashed landing slot + floating ghost following the cursor ---- */
 
 .vc-glance-row-drop-slot {
-    border-radius: var(--radius-sm, 8px);
+    border-radius: var(--vcg-t-radius-row);
     min-width: 0;
 }
 
 .vc-glance-drag-ghost.vc-glance-row-ghost {
     transform: rotate(0.8deg) scale(1.02);
     box-shadow: 0 10px 28px rgb(0 0 0 / 45%);
-    border-radius: var(--radius-sm, 8px);
+    border-radius: var(--vcg-t-radius-row);
 }
 
 .vc-glance-drag-ghost.vc-glance-row-ghost.vc-glance-no-motion {
@@ -975,26 +1188,88 @@ body.vc-glance-dragging * {
 }
 
 .vc-glance-icon-button {
+    position: relative;
     display: flex;
     align-items: center;
     justify-content: center;
     width: 28px;
     height: 28px;
     border: none;
-    border-radius: var(--radius-sm, 6px);
+    border-radius: var(--vcg-t-radius-control);
     background: transparent;
-    color: var(--icon-muted, #b5bac1);
+    color: var(--vcg-t-text-secondary);
     cursor: pointer;
 }
 
-.vc-glance-icon-button:hover:not(:disabled) {
-    background: var(--interactive-background-hover, rgb(255 255 255 / 8%));
-    color: var(--text-default, #fff);
+/* The visible box stays small so dense rows (pinned friends carry three of
+   these) keep their height, but the pointer gets a full 32px to aim at. The
+   pseudo-element is centred and out of flow, so it costs no layout. Applied to
+   every small control in the plugin, not just this class.
+   These three need an explicit containing block or the hit area would anchor to
+   whatever positioned ancestor it found instead of the button itself. */
+.vc-glance-reply-bar-cancel,
+.vc-glance-fmt-btn,
+.vc-glance-note-tool {
+    position: relative;
+}
+
+.vc-glance-icon-button::after,
+.vc-glance-reply-bar-cancel::after,
+.vc-glance-fmt-btn::after,
+.vc-glance-note-tool::after {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 32px;
+    height: 32px;
+    transform: translate(-50%, -50%);
+    content: "";
+}
+
+/* Keyboard users get the same affordance mouse users get from hover. Only two
+   focus-visible rules existed before this, so most of the plugin was invisible
+   to tab navigation. Declared before the hover rules so specificity ascends
+   down the file. */
+.vc-glance-icon-button:focus-visible,
+.vc-glance-card-collapse:focus-visible {
+    outline: 2px solid var(--vcg-t-focus);
+    outline-offset: 1px;
 }
 
 .vc-glance-icon-button:disabled {
     opacity: 0.4;
     cursor: not-allowed;
+}
+
+.vc-glance-icon-button:hover:not(:disabled) {
+    background: var(--vcg-t-hover);
+    color: var(--vcg-t-text-primary);
+}
+
+.vc-glance-icon-button:active:not(:disabled) {
+    background: var(--vcg-t-selected);
+}
+
+/* Pressed state for a toggle button (currently just privacy mode). Tinted
+   rather than a plain :hover-strength fill, so it still reads as "on" once
+   the pointer moves away, since that's the whole point of the state. */
+.vc-glance-icon-button-active {
+    background: var(--vcg-t-action-primary);
+
+    /* Literal white rather than --vcg-t-text-primary: that token flips to
+       near-black under a light background colour, which measures about 2.9:1
+       on blurple and fails the 3:1 minimum for a control. Same reason
+       .vc-glance-calc-key-equals hard-codes it. */
+    color: #fff;
+}
+
+.vc-glance-icon-button-active:hover:not(:disabled) {
+    background: var(--vcg-t-action-primary);
+    color: #fff;
+
+    /* The fill already carries the pressed state, so hover only lifts it
+       slightly - otherwise an active button feels dead under the pointer. */
+    filter: brightness(1.1);
 }
 
 /* ========== Avatars, status, badges ========== */
@@ -1038,7 +1313,7 @@ body.vc-glance-dragging * {
     height: 16px;
     padding: 0 5px;
     border-radius: 8px;
-    background: var(--status-danger, #f23f43);
+    background: var(--vcg-t-danger);
     color: #fff;
     font-size: 11px;
     font-weight: 700;
@@ -1066,7 +1341,7 @@ body.vc-glance-dragging * {
     align-items: center;
     gap: 8px;
     padding: 5px 8px;
-    border-radius: var(--radius-sm, 8px);
+    border-radius: var(--vcg-t-radius-row);
     cursor: pointer;
     user-select: none;
 }
@@ -1091,7 +1366,7 @@ body.vc-glance-dragging * {
     font-weight: 700;
     letter-spacing: 0.02em;
     text-transform: uppercase;
-    color: var(--text-muted, #949ba4);
+    color: var(--vcg-t-text-secondary);
     white-space: nowrap;
     text-overflow: ellipsis;
 }
@@ -1102,7 +1377,7 @@ body.vc-glance-dragging * {
     padding: 1px 6px;
     border-radius: 9px;
     background: var(--background-mod-subtle, rgb(255 255 255 / 6%));
-    color: var(--text-muted, #949ba4);
+    color: var(--vcg-t-text-secondary);
     font-size: 11px;
     font-weight: 600;
     text-align: center;
@@ -1120,7 +1395,7 @@ body.vc-glance-dragging * {
     flex-shrink: 0;
     width: 28px;
     height: 28px;
-    border-radius: var(--radius-sm, 8px);
+    border-radius: var(--vcg-t-radius-row);
     object-fit: cover;
 }
 
@@ -1129,7 +1404,7 @@ body.vc-glance-dragging * {
     align-items: center;
     justify-content: center;
     background: var(--background-mod-subtle, #313338);
-    color: var(--text-muted, #949ba4);
+    color: var(--vcg-t-text-secondary);
     font-size: 10px;
     font-weight: 700;
 }
@@ -1183,7 +1458,7 @@ body.vc-glance-dragging * {
     gap: 2px;
     margin: 2px 0 4px 32px;
     padding: 6px 8px;
-    border-radius: var(--radius-sm, 8px);
+    border-radius: var(--vcg-t-radius-row);
     background: var(--background-mod-subtle, rgb(0 0 0 / 20%));
 }
 
@@ -1206,7 +1481,7 @@ body.vc-glance-dragging * {
     flex: 1;
     min-width: 0;
     font-size: 13px;
-    color: var(--text-default, #dbdee1);
+    color: var(--vcg-t-text-primary);
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -1215,7 +1490,7 @@ body.vc-glance-dragging * {
 .vc-glance-occupant-flags {
     display: flex;
     gap: 4px;
-    color: var(--status-danger, #f23f43);
+    color: var(--vcg-t-danger);
 }
 
 /* ========== Buttons & inputs ========== */
@@ -1227,7 +1502,7 @@ body.vc-glance-dragging * {
     gap: 6px;
     padding: 7px 14px;
     border: none;
-    border-radius: var(--radius-sm, 8px);
+    border-radius: var(--vcg-t-radius-row);
     font-size: 13px;
     font-weight: 600;
     line-height: 1;
@@ -1236,21 +1511,43 @@ body.vc-glance-dragging * {
     transition: filter 0.15s ease;
 }
 
+.vc-glance-button:focus-visible {
+    outline: 2px solid var(--vcg-t-focus);
+    outline-offset: 1px;
+}
+
 .vc-glance-button:hover:not(:disabled) {
     filter: brightness(1.1);
 }
 
+/* A flat, unsaturated treatment rather than opacity on the brand/danger
+   backgrounds - at 50% opacity a saturated fill still reads as a live,
+   colourful button (this is why Orion's Start and Stop looked equally
+   "on" regardless of which one carried the disabled attribute). The
+   selector's specificity (class + pseudo-class) already beats
+   .vc-glance-button-brand/-danger's single class, so no !important is
+   needed to win the cascade. --vcg-t-text-secondary on --vcg-t-surface-row
+   holds a solid ~5.9:1 contrast, so the label stays legible while the
+   button unmistakably reads as off. */
 .vc-glance-button:disabled {
-    opacity: 0.5;
+    background: var(--vcg-t-surface-row);
+    color: var(--vcg-t-text-secondary);
     cursor: not-allowed;
 }
 
 .vc-glance-button-brand {
-    background: var(--brand-500, #5865f2);
+    background: var(--vcg-t-action-primary);
 }
 
 .vc-glance-button-danger {
-    background: var(--status-danger, #f23f43);
+    background: var(--vcg-t-danger);
+}
+
+/* Edit Layout / Done: present, but not shouting the way Add Widget's brand
+   fill does - this isn't the header's primary call to action. */
+.vc-glance-button-secondary {
+    background: var(--vcg-t-surface-row);
+    color: var(--vcg-t-text-primary);
 }
 
 .vc-glance-link-button {
@@ -1270,59 +1567,135 @@ body.vc-glance-dragging * {
     flex: 1;
     min-width: 0;
     padding: 7px 10px;
-    border: 1px solid var(--border-subtle, transparent);
-    border-radius: var(--radius-sm, 8px);
-    background: var(--background-mod-subtle, var(--background-secondary, #1e1f22));
-    color: var(--text-default, #dbdee1);
+    border: 1px solid var(--vcg-t-border);
+    border-radius: var(--vcg-t-radius-row);
+    background: var(--vcg-t-surface-input);
+    color: var(--vcg-t-text-primary);
     font-size: 14px;
     font-family: inherit;
 }
 
 .vc-glance-input:focus {
     outline: none;
-    border-color: var(--brand-500, #5865f2);
+    border-color: var(--vcg-t-action-primary);
 }
 
 /* ========== Quick Tools ========== */
 
-.vc-glance-tools-grid {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 10px;
+.vc-glance-tool-tabstrip {
+    display: flex;
+    gap: 4px;
+    margin-bottom: 10px;
+    border-bottom: 1px solid var(--border-subtle, rgb(255 255 255 / 8%));
 }
 
-.vc-glance-tools-column {
+.vc-glance-tool-tab {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-height: 32px;
+    padding: 0 10px;
+    border: none;
+    background: transparent;
+    color: var(--vcg-t-text-secondary);
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: color 0.15s ease;
+}
+
+.vc-glance-tool-tab:hover {
+    color: var(--vcg-t-text-primary);
+}
+
+.vc-glance-tool-tab-active {
+    color: var(--vcg-t-text-primary);
+}
+
+.vc-glance-tool-tab-active::after {
+    content: "";
+    position: absolute;
+    left: 8px;
+    right: 8px;
+    bottom: -1px;
+    height: 2px;
+    border-radius: 2px 2px 0 0;
+    background: var(--vcg-t-action-primary);
+}
+
+.vc-glance-tool-tab:focus-visible {
+    outline: 2px solid var(--brand-500, #5865f2);
+    outline-offset: -2px;
+    border-radius: var(--vcg-t-radius-control);
+}
+
+.vc-glance-tool-tab-live {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--vcg-t-action-primary);
+}
+
+.vc-glance-tool-tabpanel {
     display: flex;
     flex-direction: column;
     gap: 10px;
-    min-width: 0;
 }
 
 .vc-glance-clock-rows {
     display: flex;
     flex-direction: column;
-    gap: 4px;
+    gap: var(--vcg-t-space-xs);
 }
 
+/* Every row has three children: zone, time, then either the remove button
+   or (on Local) a same-sized spacer. flex on the zone name does the
+   space-between job, and the shared third slot keeps the time column
+   aligned whether or not that row can be removed. */
 .vc-glance-clock-row {
     display: flex;
-    align-items: baseline;
-    justify-content: space-between;
-    gap: 8px;
+    align-items: center;
+    gap: var(--vcg-t-space-sm);
 }
 
 .vc-glance-clock-zone {
+    flex: 1;
+    min-width: 0;
     font-size: 13px;
-    color: var(--text-muted, #949ba4);
+    font-weight: 500;
+    color: var(--vcg-t-text-secondary);
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
 }
 
 .vc-glance-clock-time {
+    flex-shrink: 0;
     font-size: 14px;
     font-variant-numeric: tabular-nums;
-    color: var(--text-default, #dbdee1);
+    color: var(--vcg-t-text-primary);
+}
+
+.vc-glance-clock-remove {
+    flex-shrink: 0;
+}
+
+/* Same footprint as .vc-glance-icon-button (the remove button's own class)
+   so Local's row ends at the same x as the rows below it - the same idea
+   .vc-glance-spotify-source already uses for a swapped-out icon button,
+   reusing that 28px rather than inventing a new size. No cursor or hover
+   styling: there is nothing here to click. */
+.vc-glance-clock-spacer {
+    flex-shrink: 0;
+    width: 28px;
+    height: 28px;
+}
+
+.vc-glance-clock-add {
+    display: flex;
+    gap: var(--vcg-t-space-sm);
+    margin-top: var(--vcg-t-space-xs);
 }
 
 .vc-glance-tool-display {
@@ -1330,7 +1703,7 @@ body.vc-glance-dragging * {
     font-weight: 600;
     font-variant-numeric: tabular-nums;
     text-align: center;
-    color: var(--text-default, #f2f3f5);
+    color: var(--vcg-t-text-primary);
     padding: 4px 0;
 }
 
@@ -1353,15 +1726,51 @@ body.vc-glance-dragging * {
 }
 
 .vc-glance-timer-sep {
-    color: var(--text-muted, #949ba4);
+    color: var(--vcg-t-text-secondary);
     font-weight: 600;
+}
+
+/* Capped at MAX_LAPS (20) in QuickTools.tsx - the scroll is a safety net for
+   that ceiling, not something a normal lap count is expected to hit. */
+.vc-glance-lap-list {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    margin-top: var(--vcg-t-space-xs);
+    max-height: 160px;
+    overflow-y: auto;
+}
+
+.vc-glance-lap-row {
+    display: flex;
+    align-items: center;
+    gap: var(--vcg-t-space-sm);
+    padding: 3px 4px;
+    font-size: 12px;
+    font-variant-numeric: tabular-nums;
+}
+
+.vc-glance-lap-index {
+    flex: 1;
+    min-width: 0;
+    color: var(--vcg-t-text-secondary);
+}
+
+.vc-glance-lap-split {
+    flex-shrink: 0;
+    color: var(--vcg-t-text-secondary);
+}
+
+.vc-glance-lap-total {
+    flex-shrink: 0;
+    color: var(--vcg-t-text-primary);
 }
 
 .vc-glance-calc-display {
     padding: 10px 12px;
-    border-radius: var(--radius-sm, 8px);
+    border-radius: var(--vcg-t-radius-row);
     background: var(--background-mod-subtle, rgb(0 0 0 / 30%));
-    color: var(--text-default, #f2f3f5);
+    color: var(--vcg-t-text-primary);
     font-size: 20px;
     font-variant-numeric: tabular-nums;
     text-align: right;
@@ -1378,9 +1787,9 @@ body.vc-glance-dragging * {
 .vc-glance-calc-key {
     padding: 9px 0;
     border: none;
-    border-radius: var(--radius-sm, 6px);
+    border-radius: var(--vcg-t-radius-control);
     background: var(--background-mod-subtle, rgb(255 255 255 / 5%));
-    color: var(--text-default, #dbdee1);
+    color: var(--vcg-t-text-primary);
     font-size: 14px;
     font-weight: 600;
     cursor: pointer;
@@ -1391,18 +1800,18 @@ body.vc-glance-dragging * {
 }
 
 .vc-glance-calc-key-op {
-    color: var(--brand-500, #5865f2);
+    color: var(--vcg-t-action-primary);
 }
 
 .vc-glance-calc-key-equals {
     grid-column: span 4;
-    background: var(--brand-500, #5865f2);
+    background: var(--vcg-t-action-primary);
     color: #fff;
 }
 
 .vc-glance-calc-key-equals:hover {
     filter: brightness(1.1);
-    background: var(--brand-500, #5865f2);
+    background: var(--vcg-t-action-primary);
 }
 
 /* ========== Integrations ========== */
@@ -1421,22 +1830,29 @@ body.vc-glance-dragging * {
 .vc-glance-weather-result {
     padding: 8px 10px;
     border: none;
-    border-radius: var(--radius-sm, 6px);
+    border-radius: var(--vcg-t-radius-control);
     background: transparent;
-    color: var(--text-default, #dbdee1);
+    color: var(--vcg-t-text-primary);
     font-size: 13px;
     text-align: left;
     cursor: pointer;
 }
 
 .vc-glance-weather-result:hover {
-    background: var(--interactive-background-hover, rgb(255 255 255 / 6%));
+    background: var(--vcg-t-hover);
 }
 
 .vc-glance-weather-now {
     display: flex;
     align-items: center;
     gap: 10px;
+    /* A proper row surface (matching every other list row) instead of sitting
+       directly on the card background - the condition/wind subtitle underneath
+       is --vcg-t-text-secondary, which only clears AA contrast on this darker
+       surface, not on the widget card's lighter one */
+    padding: 8px 10px;
+    border-radius: var(--vcg-t-radius-row);
+    background: var(--vcg-t-surface-row);
 }
 
 .vc-glance-weather-emoji {
@@ -1444,17 +1860,22 @@ body.vc-glance-dragging * {
     line-height: 1;
 }
 
+.vc-glance-weather-updated {
+    display: block;
+    margin-top: var(--vcg-t-space-xs);
+}
+
 .vc-glance-spotify-now {
     display: flex;
     align-items: center;
-    gap: 10px;
+    gap: var(--vcg-t-space-md);
 }
 
 .vc-glance-spotify-art {
     flex-shrink: 0;
     width: 44px;
     height: 44px;
-    border-radius: var(--radius-sm, 6px);
+    border-radius: var(--vcg-t-radius-control);
     object-fit: cover;
 }
 
@@ -1469,12 +1890,14 @@ body.vc-glance-dragging * {
 .vc-glance-spotify-idle {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: var(--vcg-t-space-sm);
+    padding: var(--vcg-t-space-xs) 0;
     color: var(--icon-muted, #80848e);
 }
 
 .vc-glance-spotify-progress {
     height: 4px;
+    margin-top: var(--vcg-t-space-sm);
     border-radius: 2px;
     background: var(--background-mod-subtle, rgb(255 255 255 / 10%));
     overflow: hidden;
@@ -1483,17 +1906,37 @@ body.vc-glance-dragging * {
 .vc-glance-spotify-progress-fill {
     height: 100%;
     border-radius: 2px;
-    background: var(--brand-500, #5865f2);
+    background: var(--vcg-t-action-primary);
+}
+
+/* Same footprint as .vc-glance-icon-button so the row doesn't reflow when a
+   generic source swaps the button for this - but no hover/cursor affordance,
+   since there is nothing to click. */
+.vc-glance-spotify-source {
+    display: flex;
+    flex-shrink: 0;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    color: var(--vcg-t-text-secondary);
+}
+
+.vc-glance-spotify-source-icon {
+    width: 16px;
+    height: 16px;
+    border-radius: 3px;
+    object-fit: cover;
 }
 
 .vc-glance-notes {
     width: 100%;
     min-height: 88px;
     padding: 8px 10px;
-    border: 1px solid var(--border-subtle, transparent);
-    border-radius: var(--radius-sm, 8px);
+    border: 1px solid var(--vcg-t-border);
+    border-radius: var(--vcg-t-radius-row);
     background: var(--background-mod-subtle, rgb(0 0 0 / 25%));
-    color: var(--text-default, #dbdee1);
+    color: var(--vcg-t-text-primary);
     font-size: 13px;
     font-family: inherit;
     line-height: 1.45;
@@ -1503,7 +1946,7 @@ body.vc-glance-dragging * {
 
 .vc-glance-notes:focus {
     outline: none;
-    border-color: var(--brand-500, #5865f2);
+    border-color: var(--vcg-t-action-primary);
 }
 
 /* ========== Client performance ========== */
@@ -1523,17 +1966,18 @@ body.vc-glance-dragging * {
 
 .vc-glance-perf-label {
     font-size: 13px;
-    color: var(--text-muted, #949ba4);
+    font-weight: 500;
+    color: var(--vcg-t-text-secondary);
 }
 
 .vc-glance-perf-value {
     font-size: 13px;
     font-variant-numeric: tabular-nums;
-    color: var(--text-default, #dbdee1);
+    color: var(--vcg-t-text-primary);
 }
 
 .vc-glance-perf-warn {
-    color: var(--status-danger, #f23f43);
+    color: var(--vcg-t-danger);
 }
 
 .vc-glance-perf-bar {
@@ -1662,7 +2106,7 @@ body[data-vc-glance-open] [class*=" panels_"] {
     width: 36px;
     height: 32px;
     border: none;
-    border-radius: var(--radius-sm, 8px);
+    border-radius: var(--vcg-t-radius-row);
     background: transparent;
     color: var(--interactive-normal, var(--icon-muted, #b5bac1));
     cursor: pointer;
@@ -1674,16 +2118,22 @@ body[data-vc-glance-open] [class*=" panels_"] {
 }
 
 .vc-glance-rail-button-danger {
-    color: var(--status-danger, #f23f43);
+    color: var(--vcg-t-danger);
 }
 
 /* ========== Text channel popup ==========
-   Rendered inside our own (transform-free) layer via a flex-centred backdrop, so
-   it lands dead-centre of the viewport - no Discord modal, no position:fixed
-   trap. Input bar follows the user's primary/accent (--vcg-* come from the
-   .vc-glance-layer ancestor; --channeltextarea-background is Discord's own chat
-   input pill var, retinted and scoped to this popup). */
+   Portalled to document.body via a flex-centred backdrop (not a descendant of
+   .vc-glance-layer), so it lands dead-centre of the viewport - no Discord
+   modal, no position:fixed trap - and carries its own vcg and vcg-t token
+   values (see ChannelPopup.tsx). Input bar follows the user's primary/accent;
+   --channeltextarea-background is Discord's own chat input pill var, retinted
+   through the token layer and scoped to this popup. */
 
+/* No backdrop-filter here on purpose. Blurring the whole viewport keeps the
+   compositor re-blurring every frame for as long as the popup is open, and it
+   showed up as sluggish scrolling in the message list on top of it. At 2px
+   behind a 45% black wash the blur was barely visible anyway, so the scrim
+   carries the separation on its own. */
 .vc-glance-popup-backdrop {
     position: fixed;
     inset: 0;
@@ -1692,7 +2142,6 @@ body[data-vc-glance-open] [class*=" panels_"] {
     align-items: center;
     justify-content: center;
     background: rgb(0 0 0 / 45%);
-    backdrop-filter: blur(2px);
     animation: vc-glance-fade-in 0.12s ease-out;
 }
 
@@ -1701,17 +2150,25 @@ body[data-vc-glance-open] [class*=" panels_"] {
     flex-direction: column;
     width: min(852px, 94vw);
     height: min(840px, 82vh);
-    border: 1px solid var(--border-subtle, transparent);
-    border-radius: var(--radius-md, 12px);
-    background: var(--background-base-low, var(--background-primary, #26262b));
-    color: var(--text-default, #dbdee1);
+    border: 1px solid var(--vcg-t-border);
+    border-radius: var(--vcg-t-radius-widget);
+    background: var(--vcg-t-surface-elevated);
+    color: var(--vcg-t-text-primary);
     overflow: hidden;
     box-shadow: 0 24px 60px rgb(0 0 0 / 55%);
     animation: vc-glance-pop 0.16s ease-out;
 
+    /* Base was --background-secondary, a solid Discord variable that swaps
+       flatly with the base theme and ignores the plugin's own translucent
+       surface system - over a dark Nitro background wearing a "light" base
+       theme it stayed bright white while .vc-glance-popup's own background
+       (--vcg-t-surface-elevated, an elevation token that reads the actual
+       surface underneath) stayed dark, which is what split the composer from
+       its window. --vcg-t-surface-input is the same alpha-elevation family,
+       so it tracks the popup's real surface instead of the theme label. */
     --channeltextarea-background: color-mix(in srgb,
         color-mix(in srgb, var(--vcg-primary, #5865f2), var(--vcg-accent, #00a8fc)) 22%,
-        var(--background-secondary, #2b2d31));
+        var(--vcg-t-surface-input));
 }
 
 .vc-glance-popup .vc-glance-composer-input {
@@ -1727,7 +2184,7 @@ body[data-vc-glance-open] [class*=" panels_"] {
     gap: 10px;
     flex-shrink: 0;
     padding: 12px 14px;
-    border-bottom: 1px solid var(--border-subtle, rgb(255 255 255 / 6%));
+    border-bottom: 1px solid var(--vcg-t-divider);
 }
 
 .vc-glance-popup-titles {
@@ -1741,7 +2198,7 @@ body[data-vc-glance-open] [class*=" panels_"] {
 .vc-glance-popup-title {
     font-size: 16px;
     font-weight: 700;
-    color: var(--text-default, #f2f3f5);
+    color: var(--vcg-t-text-primary);
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -1749,7 +2206,7 @@ body[data-vc-glance-open] [class*=" panels_"] {
 
 .vc-glance-popup-subtitle {
     font-size: 12px;
-    color: var(--text-muted, #949ba4);
+    color: var(--vcg-t-text-secondary);
     white-space: nowrap;
     flex-shrink: 0;
 }
@@ -1779,6 +2236,11 @@ body[data-vc-glance-open] [class*=" panels_"] {
     display: flex;
     flex-direction: column;
     padding: 8px 14px 4px;
+
+    /* Scoping layout and paint to the scroller stops a scroll invalidating the
+       whole popup subtree above it. Without this the browser re-evaluates the
+       modal chrome on every frame of a scroll. */
+    contain: layout paint;
 }
 
 /* Native-style "n new messages" bar, docked to the bottom of the chat while
@@ -1791,7 +2253,7 @@ body[data-vc-glance-open] [class*=" panels_"] {
     z-index: 3;
     padding: 5px 12px;
     border: none;
-    border-radius: var(--radius-sm, 8px) var(--radius-sm, 8px) 0 0;
+    border-radius: var(--vcg-t-radius-row) var(--vcg-t-radius-row) 0 0;
     background: var(--vcg-accent, var(--brand-500, #5865f2));
     color: #fff;
     font-size: 12px;
@@ -1832,6 +2294,11 @@ body[data-vc-glance-open] [class*=" panels_"] {
     .vc-glance-popup {
         animation: none;
     }
+
+    .vc-glance-msg-highlight {
+        animation: none;
+        background: var(--vcg-t-selected);
+    }
 }
 
 .vc-glance-no-motion {
@@ -1848,7 +2315,7 @@ body[data-vc-glance-open] [class*=" panels_"] {
     gap: 8px;
     margin-bottom: 6px;
     padding: 6px 6px 6px 10px;
-    border-radius: var(--radius-sm, 8px);
+    border-radius: var(--vcg-t-radius-row);
     background: var(--background-mod-strong, rgb(0 0 0 / 45%));
     backdrop-filter: blur(8px);
 }
@@ -1860,9 +2327,9 @@ body[data-vc-glance-open] [class*=" panels_"] {
     flex-shrink: 0;
     padding: 5px 10px;
     border: none;
-    border-radius: var(--radius-sm, 6px);
+    border-radius: var(--vcg-t-radius-control);
     background: transparent;
-    color: var(--text-muted, #b5bac1);
+    color: var(--vcg-t-text-secondary);
     font-size: 12px;
     font-weight: 500;
     cursor: pointer;
@@ -1903,19 +2370,19 @@ body[data-vc-glance-open] [class*=" panels_"] {
 .vc-glance-msg-author {
     font-size: 14px;
     font-weight: 600;
-    color: var(--text-default, #f2f3f5);
+    color: var(--vcg-t-text-primary);
 }
 
 .vc-glance-msg-time {
     font-size: 11px;
-    color: var(--text-muted, #949ba4);
+    color: var(--vcg-t-text-secondary);
 }
 
 .vc-glance-msg-content {
     padding-left: 32px;
     font-size: 14px;
     line-height: 1.4;
-    color: var(--text-default, #dbdee1);
+    color: var(--vcg-t-text-primary);
     overflow-wrap: anywhere;
     user-select: text;
 }
@@ -1930,13 +2397,13 @@ body[data-vc-glance-open] [class*=" panels_"] {
 .vc-glance-msg-image {
     max-width: 280px;
     max-height: 180px;
-    border-radius: var(--radius-sm, 6px);
+    border-radius: var(--vcg-t-radius-control);
     object-fit: contain;
 }
 
 .vc-glance-msg-file {
     font-size: 13px;
-    color: var(--text-muted, #949ba4);
+    color: var(--vcg-t-text-secondary);
 }
 
 .vc-glance-popup-composer {
@@ -1945,6 +2412,56 @@ body[data-vc-glance-open] [class*=" panels_"] {
     gap: 6px;
     flex: 1;
     min-width: 0;
+}
+
+/* ========== Customization panel shell (docked beside the dashboard, not a
+   modal over it - see CustomizePanel.tsx) ========== */
+
+.vc-glance-customize-panel {
+    display: flex;
+    flex-direction: column;
+    flex-shrink: 0;
+    width: 320px;
+    border-left: 1px solid var(--vcg-t-border);
+    background: var(--vcg-t-surface-elevated);
+}
+
+.vc-glance-customize-panel-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: var(--vcg-t-space-sm);
+    flex-shrink: 0;
+    padding: var(--vcg-t-space-lg) var(--vcg-t-space-lg) var(--vcg-t-space-md);
+    border-bottom: 1px solid var(--vcg-t-divider);
+}
+
+.vc-glance-customize-panel-heading {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+}
+
+.vc-glance-customize-panel-title {
+    margin: 0;
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--vcg-t-text-primary);
+}
+
+.vc-glance-customize-panel-subtitle {
+    font-size: 12px;
+    color: var(--vcg-t-text-secondary);
+}
+
+.vc-glance-customize-panel-footer {
+    display: flex;
+    justify-content: flex-end;
+    gap: var(--vcg-t-space-sm);
+    flex-shrink: 0;
+    padding: var(--vcg-t-space-md) var(--vcg-t-space-lg);
+    border-top: 1px solid var(--vcg-t-divider);
 }
 
 .vc-glance-customize-body {
@@ -1959,10 +2476,10 @@ body[data-vc-glance-open] [class*=" panels_"] {
     min-width: 0;
     max-height: 96px;
     padding: 9px 12px;
-    border: 1px solid var(--border-subtle, transparent);
-    border-radius: var(--radius-sm, 8px);
+    border: 1px solid var(--vcg-t-border);
+    border-radius: var(--vcg-t-radius-row);
     background: var(--background-mod-subtle, rgb(255 255 255 / 5%));
-    color: var(--text-default, #dbdee1);
+    color: var(--vcg-t-text-primary);
     font-size: 14px;
     font-family: inherit;
     line-height: 1.35;
@@ -1971,13 +2488,13 @@ body[data-vc-glance-open] [class*=" panels_"] {
 
 .vc-glance-composer-input:focus {
     outline: none;
-    border-color: var(--brand-500, #5865f2);
+    border-color: var(--vcg-t-action-primary);
 }
 
 .vc-glance-composer-send {
     width: 36px;
     height: 36px;
-    color: var(--brand-500, #5865f2);
+    color: var(--vcg-t-action-primary);
 }
 
 /* ========== Prompt modal (notes / nicknames) ========== */
@@ -1985,6 +2502,15 @@ body[data-vc-glance-open] [class*=" panels_"] {
 .vc-glance-prompt-input {
     width: 100%;
     box-sizing: border-box;
+}
+
+/* ========== Confirm modal (reset layout / restore defaults) ========== */
+
+.vc-glance-confirm-body {
+    margin: 0;
+    color: var(--vcg-t-text-secondary);
+    font-size: 14px;
+    line-height: 1.5;
 }
 
 /* ========================================================================
@@ -2002,7 +2528,7 @@ body[data-vc-glance-open] [class*=" panels_"] {
         linear-gradient(var(--vcg-angle, 135deg),
             color-mix(in srgb, var(--vcg-primary, #5865f2) var(--vcg-tint, 0%), transparent),
             color-mix(in srgb, var(--vcg-accent, #00a8fc) var(--vcg-tint-soft, 0%), transparent)),
-        var(--background-mod-subtle, var(--background-secondary, #2b2d31));
+        var(--vcg-t-surface-widget);
 }
 
 .vc-glance-material-classic.vc-glance-popup {
@@ -2010,7 +2536,7 @@ body[data-vc-glance-open] [class*=" panels_"] {
         linear-gradient(var(--vcg-angle, 135deg),
             color-mix(in srgb, var(--vcg-primary, #5865f2) var(--vcg-tint, 0%), transparent),
             color-mix(in srgb, var(--vcg-accent, #00a8fc) var(--vcg-tint-soft, 0%), transparent)),
-        var(--background-base-low, var(--background-primary, #26262b));
+        var(--vcg-t-surface-elevated);
 }
 
 /* --- acrylic: frosted, blurs whatever is behind (Nitro gradients shine) --- */
@@ -2026,9 +2552,10 @@ body[data-vc-glance-open] [class*=" panels_"] {
     border-color: rgb(255 255 255 / 7%);
 }
 
-.vc-glance-material-acrylic .vc-glance-subcard,
 .vc-glance-material-acrylic .vc-glance-row,
-.vc-glance-material-acrylic .vc-glance-occupant-list {
+.vc-glance-material-acrylic .vc-glance-occupant-list,
+.vc-glance-material-acrylic .vc-glance-weather-now,
+.vc-glance-material-acrylic .vc-glance-forecast-day {
     background: rgb(0 0 0 / 26%);
 }
 
@@ -2054,7 +2581,12 @@ body[data-vc-glance-open] [class*=" panels_"] {
     box-shadow: inset 0 1px 0 rgb(255 255 255 / 12%);
 }
 
-.vc-glance-material-glass .vc-glance-subcard,
+/* Weather-now, the forecast strip and Orion tasks stay off this list on
+   purpose - their status text is --vcg-t-text-secondary, and over a
+   realistic dark backdrop this 4% white wash only holds ~3.3-3.6:1 for
+   that text, well under the ~5.9:1 AA fix those three got. They keep the
+   solid row surface under glass instead. Acrylic's darker 26% wash holds
+   ~5.4-5.6:1, so it stays safe to add them there. */
 .vc-glance-material-glass .vc-glance-row,
 .vc-glance-material-glass .vc-glance-occupant-list {
     background: rgb(255 255 255 / 4%);
@@ -2073,35 +2605,42 @@ body[data-vc-glance-open] [class*=" panels_"] {
 }
 
 .vc-glance-customize-label {
+    margin: 0;
     font-size: 12px;
     font-weight: 700;
     letter-spacing: 0.02em;
     text-transform: uppercase;
-    color: var(--text-muted, #949ba4);
+    color: var(--vcg-t-text-secondary);
 }
 
 .vc-glance-segmented {
     display: flex;
     gap: 4px;
     padding: 3px;
-    border-radius: var(--radius-sm, 8px);
+    border-radius: var(--vcg-t-radius-row);
     background: var(--background-mod-strong, rgb(0 0 0 / 30%));
 }
 
 .vc-glance-segment {
     flex: 1;
+    min-height: 32px;
     padding: 7px 0;
     border: none;
     border-radius: 6px;
     background: transparent;
-    color: var(--text-muted, #949ba4);
+    color: var(--vcg-t-text-secondary);
     font-size: 13px;
     font-weight: 600;
     cursor: pointer;
 }
 
+.vc-glance-segment:focus-visible {
+    outline: 2px solid var(--vcg-t-focus);
+    outline-offset: 1px;
+}
+
 .vc-glance-segment:hover {
-    color: var(--text-default, #dbdee1);
+    color: var(--vcg-t-text-primary);
 }
 
 .vc-glance-segment-active {
@@ -2124,9 +2663,14 @@ body[data-vc-glance-open] [class*=" panels_"] {
     border: 1px solid var(--border-subtle, rgb(255 255 255 / 8%));
     border-radius: 999px;
     background: var(--background-mod-subtle, rgb(255 255 255 / 4%));
-    color: var(--text-default, #dbdee1);
+    color: var(--vcg-t-text-primary);
     font-size: 13px;
     cursor: pointer;
+}
+
+.vc-glance-preset-chip:focus-visible {
+    outline: 2px solid var(--vcg-t-focus);
+    outline-offset: 1px;
 }
 
 .vc-glance-preset-chip:hover {
@@ -2160,12 +2704,17 @@ body[data-vc-glance-open] [class*=" panels_"] {
 
 .vc-glance-color-input {
     width: 40px;
-    height: 28px;
+    height: 32px;
     padding: 0;
     border: 1px solid var(--border-subtle, rgb(255 255 255 / 10%));
     border-radius: 6px;
     background: transparent;
     cursor: pointer;
+}
+
+.vc-glance-color-input:focus-visible {
+    outline: 2px solid var(--vcg-t-focus);
+    outline-offset: 1px;
 }
 
 .vc-glance-color-input::-webkit-color-swatch-wrapper {
@@ -2180,7 +2729,7 @@ body[data-vc-glance-open] [class*=" panels_"] {
 .vc-glance-color-hex {
     font-size: 12px;
     font-variant-numeric: tabular-nums;
-    color: var(--text-muted, #949ba4);
+    color: var(--vcg-t-text-secondary);
     text-transform: uppercase;
 }
 
@@ -2196,7 +2745,7 @@ body[data-vc-glance-open] [class*=" panels_"] {
     gap: 6px;
     font-size: 12px;
     font-variant-numeric: tabular-nums;
-    color: var(--text-default, #dbdee1);
+    color: var(--vcg-t-text-primary);
 }
 
 .vc-glance-angle-arrow {
@@ -2209,6 +2758,11 @@ body[data-vc-glance-open] [class*=" panels_"] {
     height: 8px;
     cursor: pointer;
     accent-color: var(--vcg-accent, var(--brand-500, #5865f2));
+}
+
+.vc-glance-slider:focus-visible {
+    outline: 2px solid var(--vcg-t-focus);
+    outline-offset: 3px;
 }
 
 /* ========================================================================
@@ -2280,6 +2834,19 @@ body[data-vc-glance-open] [class*=" panels_"] {
     position: relative;
     flex: 1;
     min-width: 0;
+    border-radius: var(--vcg-t-radius-row);
+
+    /* Discord's real composer draws no border of its own - it reads as an
+       input purely from a background contrast against the channel behind it.
+       Retinting --channeltextarea-background to agree with this popup's
+       surface (above) shrinks that contrast on purpose, so an inset ring
+       takes over as the boundary. inset + box-shadow (not border) keeps the
+       real component's own layout untouched. */
+    box-shadow: inset 0 0 0 1px var(--vcg-t-border);
+}
+
+.vc-glance-native-composer:focus-within {
+    box-shadow: inset 0 0 0 1px var(--vcg-t-action-primary);
 }
 
 /* ---- Reply bar: "Replying to X" above the composer (PendingReplyStore) ---- */
@@ -2290,14 +2857,14 @@ body[data-vc-glance-open] [class*=" panels_"] {
     gap: 8px;
     padding: 6px 12px;
     margin-bottom: 6px;
-    border-radius: var(--radius-sm, 8px) var(--radius-sm, 8px) 0 0;
+    border-radius: var(--vcg-t-radius-row) var(--vcg-t-radius-row) 0 0;
     background: var(--background-mod-subtle, rgb(255 255 255 / 6%));
     font-size: 13px;
-    color: var(--text-muted, #b5bac1);
+    color: var(--vcg-t-text-secondary);
 }
 
 .vc-glance-reply-bar-text strong {
-    color: var(--text-default, #f2f3f5);
+    color: var(--vcg-t-text-primary);
     font-weight: 600;
 }
 
@@ -2306,6 +2873,11 @@ body[data-vc-glance-open] [class*=" panels_"] {
     height: 24px;
     flex-shrink: 0;
     font-size: 12px;
+}
+
+.vc-glance-reply-bar-cancel:focus-visible {
+    outline: 2px solid var(--vcg-t-focus);
+    outline-offset: 1px;
 }
 
 /* ---- Our own inline message editor ---- */
@@ -2318,7 +2890,7 @@ body[data-vc-glance-open] [class*=" panels_"] {
     flex-direction: column;
     gap: 4px;
     padding: 8px 10px;
-    border-radius: var(--radius-sm, 8px);
+    border-radius: var(--vcg-t-radius-row);
     background: var(--background-mod-subtle, rgb(255 255 255 / 5%));
     border-left: 3px solid var(--vcg-accent, var(--brand-500, #5865f2));
 }
@@ -2338,7 +2910,7 @@ body[data-vc-glance-open] [class*=" panels_"] {
 
 .vc-glance-msg-edit-hint {
     font-size: 11px;
-    color: var(--text-muted, #949ba4);
+    color: var(--vcg-t-text-secondary);
 }
 
 .vc-glance-linkbtn {
@@ -2361,13 +2933,13 @@ body[data-vc-glance-open] [class*=" panels_"] {
 }
 
 .vc-glance-voice-avatar.vc-glance-streaming {
-    border-color: var(--status-danger, #f23f43);
+    border-color: var(--vcg-t-danger);
 }
 
 .vc-glance-live-chip {
     padding: 1px 5px;
     border-radius: 4px;
-    background: var(--status-danger, #f23f43);
+    background: var(--vcg-t-danger);
     color: #fff;
     font-size: 9px;
     font-weight: 700;
@@ -2417,26 +2989,6 @@ img.vc-glance-occupant-joined {
     flex-shrink: 0;
 }
 
-/* ---- Zone accents: instant anchors for the two columns ---- */
-
-.vc-glance-column-label::before {
-    content: "";
-    display: inline-block;
-    width: 7px;
-    height: 7px;
-    margin-right: 7px;
-    border-radius: 50%;
-    vertical-align: 1px;
-}
-
-.vc-glance-column-social .vc-glance-column-label::before {
-    background: var(--brand-500, #5865f2);
-}
-
-.vc-glance-column-tools .vc-glance-column-label::before {
-    background: var(--status-online, #23a55a);
-}
-
 /* ---- Cards: subtle physical hover lift ---- */
 
 .vc-glance-card {
@@ -2467,9 +3019,10 @@ body.vc-glance-dragging .vc-glance-card:hover {
 .vc-glance-spotify-times {
     display: flex;
     justify-content: space-between;
+    margin-top: var(--vcg-t-space-xs);
     font-size: 11px;
     font-variant-numeric: tabular-nums;
-    color: var(--text-muted, #949ba4);
+    color: var(--vcg-t-text-secondary);
 }
 
 /* ========================================================================
@@ -2483,7 +3036,7 @@ body.vc-glance-dragging .vc-glance-card:hover {
     gap: 4px;
     margin-bottom: 8px;
     padding-bottom: 8px;
-    border-bottom: 1px solid var(--border-subtle, rgb(255 255 255 / 6%));
+    border-bottom: 1px solid var(--vcg-t-divider);
 }
 
 .vc-glance-inbox-tab {
@@ -2492,9 +3045,9 @@ body.vc-glance-dragging .vc-glance-card:hover {
     gap: 6px;
     padding: 5px 10px;
     border: none;
-    border-radius: var(--radius-sm, 8px);
+    border-radius: var(--vcg-t-radius-row);
     background: transparent;
-    color: var(--text-muted, #949ba4);
+    color: var(--vcg-t-text-secondary);
     font-size: 13px;
     font-weight: 600;
     cursor: pointer;
@@ -2502,19 +3055,19 @@ body.vc-glance-dragging .vc-glance-card:hover {
 
 .vc-glance-inbox-tab:hover {
     background: var(--interactive-background-hover, rgb(255 255 255 / 5%));
-    color: var(--text-default, #dbdee1);
+    color: var(--vcg-t-text-primary);
 }
 
 .vc-glance-inbox-tab-active {
     background: var(--interactive-background-hover, rgb(255 255 255 / 8%));
-    color: var(--text-default, #f2f3f5);
+    color: var(--vcg-t-text-primary);
 }
 
 .vc-glance-inbox-tab-count {
     min-width: 16px;
     padding: 0 5px;
     border-radius: 8px;
-    background: var(--status-danger, #f23f43);
+    background: var(--vcg-t-danger);
     color: #fff;
     font-size: 11px;
     font-weight: 700;
@@ -2548,13 +3101,13 @@ body.vc-glance-dragging .vc-glance-card:hover {
 .vc-glance-mention-author {
     font-size: 14px;
     font-weight: 600;
-    color: var(--text-default, #f2f3f5);
+    color: var(--vcg-t-text-primary);
     white-space: nowrap;
 }
 
 .vc-glance-mention-location {
     font-size: 11px;
-    color: var(--text-muted, #949ba4);
+    color: var(--vcg-t-text-secondary);
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -2567,7 +3120,7 @@ body.vc-glance-dragging .vc-glance-card:hover {
     overflow: hidden;
     font-size: 13px;
     line-height: 1.4;
-    color: var(--text-default, #dbdee1);
+    color: var(--vcg-t-text-primary);
     overflow-wrap: anywhere;
 }
 
@@ -2580,7 +3133,7 @@ body.vc-glance-dragging .vc-glance-card:hover {
 
 .vc-glance-card-attention {
     position: relative;
-    border-color: color-mix(in srgb, var(--brand-500, #5865f2) 45%, transparent);
+    border-color: color-mix(in srgb, var(--vcg-t-action-primary) 45%, transparent);
     overflow: hidden;
 }
 
@@ -2591,7 +3144,7 @@ body.vc-glance-dragging .vc-glance-card:hover {
     pointer-events: none;
     background: linear-gradient(105deg,
         transparent 40%,
-        color-mix(in srgb, var(--brand-500, #5865f2) 12%, rgb(255 255 255 / 6%)) 50%,
+        color-mix(in srgb, var(--vcg-t-action-primary) 12%, rgb(255 255 255 / 6%)) 50%,
         transparent 60%);
     background-size: 250% 100%;
     animation: vc-glance-shine 3.2s ease-in-out infinite;
@@ -2627,8 +3180,8 @@ body.vc-glance-dragging .vc-glance-card:hover {
 }
 
 .vc-glance-reminder-triggered {
-    background: color-mix(in srgb, var(--brand-500, #5865f2) 12%, var(--background-mod-strong, #1e1f22));
-    border: 1px solid color-mix(in srgb, var(--brand-500, #5865f2) 35%, transparent);
+    background: color-mix(in srgb, var(--vcg-t-action-primary) 12%, var(--background-mod-strong, #1e1f22));
+    border: 1px solid color-mix(in srgb, var(--vcg-t-action-primary) 35%, transparent);
 }
 
 .vc-glance-reminder-triggered .vc-glance-row-title {
@@ -2645,7 +3198,7 @@ body.vc-glance-dragging .vc-glance-card:hover {
 .vc-glance-event-countdown {
     font-size: 12px;
     font-variant-numeric: tabular-nums;
-    color: var(--text-muted, #949ba4);
+    color: var(--vcg-t-text-secondary);
     white-space: nowrap;
 }
 
@@ -2654,7 +3207,7 @@ body.vc-glance-dragging .vc-glance-card:hover {
 }
 
 .vc-glance-event-interested {
-    color: var(--brand-500, #5865f2);
+    color: var(--vcg-t-action-primary);
 }
 
 /* ---- Incoming call on pinned friends ---- */
@@ -2713,7 +3266,7 @@ body.vc-glance-dragging .vc-glance-card:hover {
 }
 
 .vc-glance-call-reject {
-    background: var(--status-danger, #f23f43);
+    background: var(--vcg-t-danger);
 }
 
 /* ========================================================================
@@ -2736,7 +3289,7 @@ body.vc-glance-dragging .vc-glance-card:hover {
 }
 
 .vc-glance-bookmark-thumb-guild {
-    border-radius: var(--radius-sm, 8px);
+    border-radius: var(--vcg-t-radius-row);
 }
 
 .vc-glance-bookmark-thumb-fallback {
@@ -2744,7 +3297,7 @@ body.vc-glance-dragging .vc-glance-card:hover {
     align-items: center;
     justify-content: center;
     background: var(--background-mod-subtle, #313338);
-    color: var(--text-muted, #949ba4);
+    color: var(--vcg-t-text-secondary);
     font-size: 11px;
     font-weight: 700;
 }
@@ -2762,13 +3315,18 @@ body.vc-glance-dragging .vc-glance-card:hover {
     height: 22px;
     padding: 0 6px;
     border: none;
-    border-radius: var(--radius-sm, 6px);
+    border-radius: var(--vcg-t-radius-control);
     background: transparent;
-    color: var(--text-muted, #949ba4);
+    color: var(--vcg-t-text-secondary);
     font-size: 12px;
     font-weight: 700;
     font-family: var(--font-code, monospace);
     cursor: pointer;
+}
+
+.vc-glance-fmt-btn:focus-visible {
+    outline: 2px solid var(--vcg-t-focus);
+    outline-offset: 1px;
 }
 
 .vc-glance-fmt-btn:hover {
@@ -2789,7 +3347,7 @@ body.vc-glance-dragging .vc-glance-card:hover {
     padding: 6px;
     border: 1px solid var(--border-subtle, rgb(255 255 255 / 8%));
     border-radius: var(--radius-md, 8px);
-    background: var(--background-base-low, var(--background-primary, #26262b));
+    background: var(--vcg-t-surface-elevated);
     box-shadow: 0 8px 24px rgb(0 0 0 / 45%);
 }
 
@@ -2799,11 +3357,11 @@ body.vc-glance-dragging .vc-glance-card:hover {
     font-weight: 700;
     letter-spacing: 0.02em;
     text-transform: uppercase;
-    color: var(--text-muted, #949ba4);
+    color: var(--vcg-t-text-secondary);
 }
 
 .vc-glance-emoji-suggest-title strong {
-    color: var(--text-default, #f2f3f5);
+    color: var(--vcg-t-text-primary);
 }
 
 .vc-glance-emoji-suggest-row {
@@ -2812,9 +3370,9 @@ body.vc-glance-dragging .vc-glance-card:hover {
     gap: 8px;
     padding: 5px 8px;
     border: none;
-    border-radius: var(--radius-sm, 6px);
+    border-radius: var(--vcg-t-radius-control);
     background: transparent;
-    color: var(--text-default, #dbdee1);
+    color: var(--vcg-t-text-primary);
     font-size: 14px;
     text-align: left;
     cursor: pointer;
@@ -2854,7 +3412,7 @@ body.vc-glance-dragging .vc-glance-card:hover {
     margin-left: auto;
     padding-left: 8px;
     font-size: 12px;
-    color: var(--text-muted, #949ba4);
+    color: var(--vcg-t-text-secondary);
     white-space: nowrap;
 }
 
@@ -2874,19 +3432,76 @@ body.vc-glance-dragging .vc-glance-card:hover {
     gap: 6px;
     margin: 8px 0 2px;
     height: 0;
-    border-top: 1px solid var(--status-danger, #f23f43);
+    border-top: 1px solid var(--vcg-t-danger);
 }
 
 .vc-glance-new-divider span {
     margin-left: auto;
     padding: 0 6px;
     border-radius: 4px;
-    background: var(--status-danger, #f23f43);
+    background: var(--vcg-t-danger);
     color: #fff;
     font-size: 9px;
     font-weight: 700;
     letter-spacing: 0.04em;
     transform: translateY(-50%);
+}
+
+/* ---- Message context menu: quick reactions row ---- */
+.vc-glance-quick-reactions {
+    display: flex;
+    gap: 4px;
+    padding: 2px 8px 6px;
+}
+
+.vc-glance-quick-reaction-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 30px;
+    height: 30px;
+    border: none;
+    border-radius: var(--vcg-t-radius-control);
+    background: transparent;
+    font-size: 17px;
+    line-height: 1;
+    cursor: pointer;
+}
+
+.vc-glance-quick-reaction-icon {
+    width: 20px;
+    height: 20px;
+    object-fit: contain;
+}
+
+.vc-glance-quick-reaction-btn:hover {
+    background: var(--vcg-t-hover);
+}
+
+.vc-glance-quick-reaction-btn:focus-visible {
+    outline: 2px solid var(--vcg-t-focus);
+    outline-offset: 1px;
+}
+
+.vc-glance-quick-reaction-active {
+    background: var(--vcg-t-selected);
+}
+
+/* Reply-jump highlight: a brief flash on the row scrolled to inside the
+   popup, echoing the real client's own jump-and-flash. */
+@keyframes vc-glance-msg-flash {
+    from {
+        background: var(--vcg-t-selected);
+    }
+
+    to {
+        background: transparent;
+    }
+}
+
+.vc-glance-msg-highlight {
+    animation: vc-glance-msg-flash 1.2s ease-out;
+    border-radius: var(--vcg-t-radius-row);
 }
 
 /* ========== Quick Notes: structure toolbar + rendered view ========== */
@@ -2907,11 +3522,16 @@ body.vc-glance-dragging .vc-glance-card:hover {
     width: 24px;
     height: 22px;
     border: none;
-    border-radius: var(--radius-sm, 6px);
+    border-radius: var(--vcg-t-radius-control);
     background: transparent;
-    color: var(--text-muted, #949ba4);
+    color: var(--vcg-t-text-secondary);
     font-size: 12px;
     cursor: pointer;
+}
+
+.vc-glance-note-tool:focus-visible {
+    outline: 2px solid var(--vcg-t-focus);
+    outline-offset: 1px;
 }
 
 .vc-glance-note-tool:hover {
@@ -2924,7 +3544,7 @@ body.vc-glance-dragging .vc-glance-card:hover {
     padding: 6px 2px;
     font-size: 13px;
     line-height: 1.5;
-    color: var(--text-default, #dbdee1);
+    color: var(--vcg-t-text-primary);
     cursor: text;
 }
 
@@ -2943,7 +3563,7 @@ body.vc-glance-dragging .vc-glance-card:hover {
 
 .vc-glance-note-done span {
     text-decoration: line-through;
-    color: var(--text-muted, #949ba4);
+    color: var(--vcg-t-text-secondary);
 }
 
 .vc-glance-note-bullet {
@@ -2955,7 +3575,7 @@ body.vc-glance-dragging .vc-glance-card:hover {
     content: "•";
     position: absolute;
     left: 4px;
-    color: var(--text-muted, #949ba4);
+    color: var(--vcg-t-text-secondary);
 }
 
 .vc-glance-note-divider {
@@ -2998,11 +3618,13 @@ body.vc-glance-dragging .vc-glance-card:hover {
     min-width: 0;
     overflow: hidden;
     padding: 7px 10px;
-    border: 1px solid var(--border-subtle, transparent);
-    border-radius: var(--radius-sm, 8px);
-    background: var(--background-mod-subtle, var(--background-secondary, #1e1f22));
+    border: 1px solid var(--vcg-t-border);
+    border-radius: var(--vcg-t-radius-row);
+    background: var(--vcg-t-surface-input);
     font-size: 13px;
-    color: var(--text-muted, #b5bac1);
+    /* This is the generated output the Copy button sends to clipboard, not a
+       hint or caption - it reads as the answer, not metadata about it */
+    color: var(--vcg-t-text-primary);
     white-space: nowrap;
     text-overflow: ellipsis;
     font-variant-numeric: tabular-nums;
@@ -3028,7 +3650,7 @@ body.vc-glance-dragging .vc-glance-card:hover {
 }
 
 .vc-glance-input-error {
-    border-color: var(--status-danger, #f23f43) !important;
+    border-color: var(--vcg-t-danger) !important;
 }
 
 /* ========================================================================
@@ -3042,7 +3664,8 @@ body.vc-glance-dragging .vc-glance-card:hover {
 .vc-glance-occupant-list,
 .vc-glance-notes,
 .vc-glance-popup-scroll,
-.vc-glance-row-list {
+.vc-glance-row-list,
+.vc-glance-lap-list {
     scrollbar-width: thin;
     scrollbar-color: var(--scrollbar-thin-thumb, rgb(255 255 255 / 16%)) transparent;
 }
@@ -3053,7 +3676,8 @@ body.vc-glance-dragging .vc-glance-card:hover {
 .vc-glance-occupant-list::-webkit-scrollbar,
 .vc-glance-notes::-webkit-scrollbar,
 .vc-glance-popup-scroll::-webkit-scrollbar,
-.vc-glance-row-list::-webkit-scrollbar {
+.vc-glance-row-list::-webkit-scrollbar,
+.vc-glance-lap-list::-webkit-scrollbar {
     width: 8px;
     height: 8px;
 }
@@ -3064,7 +3688,8 @@ body.vc-glance-dragging .vc-glance-card:hover {
 .vc-glance-occupant-list::-webkit-scrollbar-track,
 .vc-glance-notes::-webkit-scrollbar-track,
 .vc-glance-popup-scroll::-webkit-scrollbar-track,
-.vc-glance-row-list::-webkit-scrollbar-track {
+.vc-glance-row-list::-webkit-scrollbar-track,
+.vc-glance-lap-list::-webkit-scrollbar-track {
     background: transparent;
     border-radius: 4px;
 }
@@ -3075,7 +3700,8 @@ body.vc-glance-dragging .vc-glance-card:hover {
 .vc-glance-occupant-list::-webkit-scrollbar-thumb,
 .vc-glance-notes::-webkit-scrollbar-thumb,
 .vc-glance-popup-scroll::-webkit-scrollbar-thumb,
-.vc-glance-row-list::-webkit-scrollbar-thumb {
+.vc-glance-row-list::-webkit-scrollbar-thumb,
+.vc-glance-lap-list::-webkit-scrollbar-thumb {
     background-color: var(--scrollbar-thin-thumb, rgb(255 255 255 / 16%));
     border-radius: 4px;
     border: 2px solid transparent;
@@ -3088,7 +3714,8 @@ body.vc-glance-dragging .vc-glance-card:hover {
 .vc-glance-occupant-list::-webkit-scrollbar-thumb:hover,
 .vc-glance-notes::-webkit-scrollbar-thumb:hover,
 .vc-glance-popup-scroll::-webkit-scrollbar-thumb:hover,
-.vc-glance-row-list::-webkit-scrollbar-thumb:hover {
+.vc-glance-row-list::-webkit-scrollbar-thumb:hover,
+.vc-glance-lap-list::-webkit-scrollbar-thumb:hover {
     background-color: var(--scrollbar-auto-thumb, rgb(255 255 255 / 28%));
 }
 
@@ -3144,12 +3771,18 @@ body.vc-glance-dragging .vc-glance-card:hover {
     --icon-muted: #494d54;
     --interactive-text-active: #060607;
     --channels-default: #3a3d44;
+    /* Redefined rather than left to cascade through --text-default/--text-muted
+       above, so the token names stay directly greppable at the point they change */
+    --vcg-t-text-primary: #17181b;
+    --vcg-t-text-secondary: #494d54;
+    --vcg-t-text-muted: #494d54;
     color: #17181b;
 }
 
 .vc-glance-layer.vc-glance-bg-light .vc-glance-topbar-title,
 .vc-glance-layer.vc-glance-bg-light .vc-glance-hero-greeting,
 .vc-glance-layer.vc-glance-bg-light .vc-glance-card-title,
+.vc-glance-layer.vc-glance-bg-light .vc-glance-card-icon,
 .vc-glance-layer.vc-glance-bg-light .vc-glance-row-title {
     color: #060607;
 }
@@ -3194,12 +3827,10 @@ body.vc-glance-dragging .vc-glance-card:hover {
         rgb(255 255 255 / 52%);
 }
 
-.vc-glance-on-light .vc-glance-subcard {
-    background: rgb(255 255 255 / 48%);
-}
-
 .vc-glance-on-light .vc-glance-row,
-.vc-glance-on-light .vc-glance-occupant-list {
+.vc-glance-on-light .vc-glance-occupant-list,
+.vc-glance-on-light .vc-glance-weather-now,
+.vc-glance-on-light .vc-glance-forecast-day {
     background: rgb(0 0 0 / 5%);
 }
 
@@ -3214,6 +3845,16 @@ body.vc-glance-dragging .vc-glance-card:hover {
 .vc-glance-on-light .vc-glance-timestamp-preview {
     background: rgb(255 255 255 / 55%);
     border-color: rgb(0 0 0 / 10%);
+}
+
+/* Same white-glass surface as the row above, carried through the custom
+   property instead of `background` since the element this paints is
+   Discord's own (--channeltextarea-background, not a class we own), and the
+   same rgb(0 0 0 / 10%) ring the other inputs on this list get. */
+.vc-glance-on-light .vc-glance-native-composer {
+    --channeltextarea-background: rgb(255 255 255 / 55%);
+
+    box-shadow: inset 0 0 0 1px rgb(0 0 0 / 10%);
 }
 
 .vc-glance-on-light .vc-glance-guild-header:hover,
@@ -3241,8 +3882,14 @@ body.vc-glance-dragging .vc-glance-card:hover {
 }
 
 .vc-glance-on-light .vc-glance-emoji-suggest,
-.vc-glance-on-light .vc-glance-dropdown-menu,
 .vc-glance-on-light .vc-glance-palette {
+    border-color: rgb(0 0 0 / 10%);
+}
+
+/* .vc-glance-dropdown-menu portals to document.body (see Dropdown.tsx), so it
+   never sits inside a .vc-glance-on-light ancestor - the component reads
+   useOnLightTheme() itself and puts the class directly on the menu instead. */
+.vc-glance-dropdown-menu.vc-glance-on-light {
     border-color: rgb(0 0 0 / 10%);
 }
 
@@ -3283,24 +3930,24 @@ body.vc-glance-dragging .vc-glance-card:hover {
     font-size: 12px;
     font-weight: 600;
     background: var(--background-mod-strong, rgb(0 0 0 / 24%));
-    color: var(--text-default, #dbdee1);
+    color: var(--vcg-t-text-primary);
 }
 
 .vc-glance-orion-dot {
     width: 8px;
     height: 8px;
     border-radius: 50%;
-    background: var(--text-muted, #949ba4);
+    background: var(--vcg-t-text-secondary);
 }
 
 .vc-glance-orion-state-running .vc-glance-orion-dot {
-    background: var(--status-positive, #23a55a);
-    box-shadow: 0 0 0 3px color-mix(in srgb, var(--status-positive, #23a55a) 30%, transparent);
+    background: var(--vcg-t-success);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--vcg-t-success) 30%, transparent);
     animation: vc-glance-orion-pulse 1.6s ease-in-out infinite;
 }
 
 .vc-glance-orion-state-stopped .vc-glance-orion-dot {
-    background: var(--status-danger, #f23f43);
+    background: var(--vcg-t-danger);
 }
 
 @keyframes vc-glance-orion-pulse {
@@ -3321,7 +3968,7 @@ body.vc-glance-dragging .vc-glance-card:hover {
 
 .vc-glance-orion-button-status {
     background: var(--background-mod-strong, rgb(255 255 255 / 8%));
-    color: var(--text-default, #dbdee1);
+    color: var(--vcg-t-text-primary);
 }
 
 .vc-glance-orion-tasks {
@@ -3334,6 +3981,24 @@ body.vc-glance-dragging .vc-glance-card:hover {
     display: flex;
     flex-direction: column;
     gap: 5px;
+    /* Every other widget's list items sit on --vcg-t-surface-row; these were
+       floating on the bare card background, which is why the 11px status text
+       next to the name read weaker here than the equivalent line elsewhere */
+    padding: 8px 10px;
+    border-radius: var(--vcg-t-radius-row);
+    background: var(--vcg-t-surface-row);
+}
+
+/* Kept out of the shared acrylic/on-light lists in the materials section -
+   this rule is declared after .vc-glance-orion-task itself, and putting it
+   up there with the others would put the material override before its own
+   base rule, which is what no-descending-specificity is built to catch. */
+.vc-glance-material-acrylic .vc-glance-orion-task {
+    background: rgb(0 0 0 / 26%);
+}
+
+.vc-glance-on-light .vc-glance-orion-task {
+    background: rgb(0 0 0 / 5%);
 }
 
 .vc-glance-orion-task-head {
@@ -3347,7 +4012,7 @@ body.vc-glance-dragging .vc-glance-card:hover {
     overflow: hidden;
     font-size: 13px;
     font-weight: 500;
-    color: var(--text-default, #dbdee1);
+    color: var(--vcg-t-text-primary);
     text-overflow: ellipsis;
     white-space: nowrap;
 }
@@ -3357,7 +4022,7 @@ body.vc-glance-dragging .vc-glance-card:hover {
     font-size: 11px;
     font-weight: 600;
     letter-spacing: 0.02em;
-    color: var(--text-muted, #949ba4);
+    color: var(--vcg-t-text-secondary);
 }
 
 .vc-glance-orion-task-active .vc-glance-orion-task-status {
@@ -3365,7 +4030,7 @@ body.vc-glance-dragging .vc-glance-card:hover {
 }
 
 .vc-glance-orion-task-done .vc-glance-orion-task-status {
-    color: var(--status-positive, #23a55a);
+    color: var(--vcg-t-success);
 }
 
 .vc-glance-orion-track {
@@ -3383,15 +4048,79 @@ body.vc-glance-dragging .vc-glance-card:hover {
 }
 
 .vc-glance-orion-task-done .vc-glance-orion-fill {
-    background: var(--status-positive, #23a55a);
+    background: var(--vcg-t-success);
+}
+
+/* ========================================================================
+   Edit mode
+   Targets .vc-glance-widget-slot rather than .vc-glance-card itself: the
+   card selector already has a long history of theme/material overrides
+   throughout this file (see no-descending-specificity above), and the slot
+   wraps the card with no gap of its own, so a ring drawn on the slot lands
+   on exactly the same edges without joining that fight.
+   ======================================================================== */
+
+/* Card edges stand out while editing, so it reads as a grid of distinct,
+   movable pieces before the user has picked anything up. The redundant
+   [data-glance-widget] qualifier (every slot already carries it, for the
+   drag controller's own hit-testing) outweighs the animation-delay rules
+   near the top of the file, which would otherwise win this specificity fight
+   despite being unrelated to edit mode. */
+body.vc-glance-editing .vc-glance-widget-slot[data-glance-widget] {
+    border-radius: var(--vcg-t-radius-widget);
+    box-shadow: inset 0 0 0 1px var(--border-strong, rgb(255 255 255 / 20%));
+}
+
+/* Same "somewhere real to aim at" treatment the empty-column outline gets
+   during an actual drag (see .vc-glance-dragging above), extended to all of
+   edit mode - so the spare column is visible before the user starts dragging,
+   not just once they already have something in hand. */
+body.vc-glance-editing .vc-glance-column:empty {
+    min-height: 120px;
+    border: 2px dashed var(--border-strong, rgb(255 255 255 / 20%));
+    border-radius: var(--vcg-t-radius-widget);
+    background: var(--background-mod-subtle, rgb(255 255 255 / 3%));
+    box-sizing: border-box;
+}
+
+/* ========================================================================
+   Privacy mode
+   Same body-class toggle as edit mode above. Blurs exactly the surfaces
+   that name who the user talks to (pinned friends, server names, the
+   weather location) so the dashboard survives a screenshot or a screen
+   share without a live decode of those. A visual filter only: the text is
+   still in the DOM and the accessibility tree underneath it, so this is
+   presentation cover, not a redaction. Rows stay clickable and focusable
+   on purpose - no pointer-events:none, no swapping in placeholder text -
+   because the point is hiding names from onlookers, not disabling the
+   dashboard for the person using it.
+
+   Quick Access is scoped through [data-glance-widget="quick-access"], not
+   the bare .vc-glance-guild-header-name class: the Events widget groups its
+   rows under an identical header class for an unrelated reason (grouping by
+   server, not naming who you talk to) and would otherwise get blurred too.
+   The attribute comes from the widget slot in GlanceLayer.tsx, one level
+   above WidgetCard's own markup. */
+
+body.vc-glance-privacy .vc-glance-friend-tile .vc-glance-avatar-wrap,
+body.vc-glance-privacy .vc-glance-friend-tile .vc-glance-row-text,
+body.vc-glance-privacy [data-glance-widget="quick-access"] .vc-glance-guild-header-name,
+body.vc-glance-privacy .vc-glance-weather-location {
+    filter: blur(8px);
+    transition: filter 0.15s ease;
 }
 
 /* ========== Reduced motion: global catch-all ==========
    The selectors above already gate their specific animations/transitions per
    component. This is belt-and-suspenders coverage for anything nested under
    the plugin's layer or popup backdrop that isn't individually scoped above
-   (e.g. .vc-glance-orion-fill's width transition). */
+   (e.g. .vc-glance-orion-fill's width transition). .vc-glance-overlay is
+   listed on its own (not with a `*`): its right-edge transition, for the
+   native theme editor docking beside it, lives on that element itself, one
+   level above .vc-glance-layer, so the descendant selector below can't reach
+   it. */
 @media (prefers-reduced-motion: reduce) {
+    .vc-glance-overlay,
     .vc-glance-layer *,
     .vc-glance-popup-backdrop * {
         animation-duration: 0.001ms !important;

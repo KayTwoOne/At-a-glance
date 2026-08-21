@@ -7,7 +7,7 @@
 import ErrorBoundary from "@components/ErrorBoundary";
 import { insertTextIntoChatInputBox, sendMessage } from "@utils/discord";
 import { Logger } from "@utils/Logger";
-import { findByPropsLazy, findComponentByCodeLazy, findLazy } from "@webpack";
+import { findComponentByCodeLazy, findLazy } from "@webpack";
 import {
     ChannelRouter,
     ChannelStore,
@@ -30,15 +30,11 @@ import { useAppearance, useOnLightTheme } from "./appearance";
 import { closeGlance } from "./GlanceLayer";
 import { ExternalIcon, SendIcon } from "./icons";
 import { MsgActions, NativeMessageList, PlainMessageList, ReplyBar } from "./PopupMessages";
+import { MessageFetchActions } from "./widgets/Mentions";
 
 const logger = new Logger("AtAGlance");
 
 /* ========== Discord internals (each with a graceful fallback) ========== */
-
-// Discord's message action creators (fetchMessages lives alongside jumpToMessage)
-const MessageFetchActions = findByPropsLazy("fetchMessages", "jumpToMessage") as {
-    fetchMessages(options: { channelId: string; limit?: number; }): Promise<unknown>;
-};
 
 // Discord's REAL chat input (slate editor). The same component Discord embeds
 // in its own modals (profile replies, voice channel status), rendered here in
@@ -493,7 +489,6 @@ function NativeComposer({ channel, canSend, label }: { channel: any; canSend: bo
     );
 }
 
-
 /* ========== formatting toolbar ========== */
 
 /* Markdown the composer understands, one keystroke away. Buttons use
@@ -531,6 +526,17 @@ function FormatToolbar() {
 
 /* ========== the popup ========== */
 
+/** The message list for a channel, tolerant of either fork's type shape.
+ *  Vencord types ChannelMessages with toArray(); Equicord types it with the
+ *  backing _array. The runtime object carries both, so this reads whichever is
+ *  present and yields an empty list if neither is, rather than throwing. */
+function readChannelMessages(store: unknown): any[] {
+    const source = store as { toArray?: () => any[]; _array?: any[]; } | null | undefined;
+    if (typeof source?.toArray === "function") return source.toArray();
+    if (Array.isArray(source?._array)) return source!._array;
+    return [];
+}
+
 function channelLabel(channel: any): string {
     if (channel.isDM?.()) {
         const recipient = UserStore.getUser(channel.getRecipientId?.());
@@ -554,7 +560,11 @@ export function ChannelPopupOverlay({ channelId, onClose }: { channelId: string;
     );
     const messages = useStateFromStores(
         [MessageStore],
-        () => MessageStore.getMessages(channelId)?.toArray?.() ?? [],
+        // Vencord's discord-types declares toArray() on ChannelMessages;
+        // Equicord's declares the backing _array instead. The real object has
+        // both, so read whichever is there rather than binding the plugin to
+        // one fork's type definitions.
+        () => readChannelMessages(MessageStore.getMessages(channelId)),
         [channelId]
     );
     const lastMessageId = useStateFromStores(
@@ -570,6 +580,8 @@ export function ChannelPopupOverlay({ channelId, onClose }: { channelId: string;
     // Which of our own messages is being edited (our controlled editor)
     const [editingId, setEditingId] = React.useState<string | null>(null);
     React.useEffect(() => setEditingId(null), [channelId]);
+    // Stable identity, or every memoised message row invalidates on each render
+    const stopEditing = React.useCallback(() => setEditingId(null), []);
 
     // Where the "NEW" divider goes - captured on open, BEFORE the ack below
     // wipes the unread state (the host keys us by channelId, so this initializer
@@ -659,6 +671,59 @@ export function ChannelPopupOverlay({ channelId, onClose }: { channelId: string;
         };
     }, [channelId]);
 
+    // Reply-reference click (item: clicking a reply jumps to the message it
+    // answers). Read through a ref rather than closing over `messages`
+    // directly - onReplyClick is handed to the memoised message rows, and a
+    // dependency on the message array would mint a new function (and bust the
+    // memo) on every incoming message.
+    const messagesRef = React.useRef(messages);
+    messagesRef.current = messages;
+    const highlightTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+    React.useEffect(() => () => {
+        if (highlightTimerRef.current) clearTimeout(highlightTimerRef.current);
+    }, []);
+
+    const onReplyClick = React.useCallback((refChannelId: string, refMessageId: string) => {
+        try {
+            const loadedHere = messagesRef.current.some(m => m.id === refMessageId);
+            const el = loadedHere
+                ? scrollerRef.current?.querySelector<HTMLElement>(`#vc-glance-msgrow-${refMessageId}`)
+                : null;
+            if (el) {
+                el.scrollIntoView({ block: "center", behavior: "smooth" });
+                el.classList.remove("vc-glance-msg-highlight");
+                void el.offsetWidth; // restart the animation if the same row is hit twice
+                el.classList.add("vc-glance-msg-highlight");
+                if (highlightTimerRef.current) clearTimeout(highlightTimerRef.current);
+                highlightTimerRef.current = setTimeout(() => {
+                    el.classList.remove("vc-glance-msg-highlight");
+                    highlightTimerRef.current = null;
+                }, 1200);
+                return;
+            }
+        } catch (e) {
+            logger.error("Failed to scroll to replied message in popup", e);
+        }
+
+        // Not loaded in this popup - leave it and let the real client fetch and
+        // jump, same order Bookmarks.tsx uses (navigate first: jumpToMessage
+        // alone can no-op on a message the client hasn't loaded yet).
+        try {
+            onClose();
+            closeGlance();
+            ChannelRouter.transitionToChannel(refChannelId);
+            setTimeout(() => {
+                try {
+                    MessageFetchActions.jumpToMessage({ channelId: refChannelId, messageId: refMessageId, flash: true });
+                } catch (e) {
+                    logger.error("Failed to jump to replied message", e);
+                }
+            }, 150);
+        } catch (e) {
+            logger.error("Failed to open channel for replied message", e);
+        }
+    }, [onClose]);
+
     // Escape closes the popup (bubble phase, so the composer can cancel a
     // reply/edit first via preventDefault). GlanceLayer's own Escape yields
     // while the popup is open (isChannelPopupOpen guard).
@@ -745,7 +810,8 @@ export function ChannelPopupOverlay({ channelId, onClose }: { channelId: string;
                                                     editingId={editingId}
                                                     firstUnreadId={firstUnreadId}
                                                     onEdit={setEditingId}
-                                                    onStopEdit={() => setEditingId(null)}
+                                                    onStopEdit={stopEditing}
+                                                    onReplyClick={onReplyClick}
                                                 />
                                             </ErrorBoundary>
                                         )

@@ -32,7 +32,3 @@ export function useGlanceModalGuard() {
         };
     }, []);
 }
-
-export function anyGlanceModalOpen() {
-    return openModalCount > 0;
-}

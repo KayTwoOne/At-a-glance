@@ -40,13 +40,18 @@ export const settings = definePluginSettings({
     },
     extraTimezones: {
         type: OptionType.STRING,
-        description: "Extra clocks for Quick Tools: comma-separated IANA timezones (e.g. UTC, Europe/Berlin)",
+        description: "Extra clocks for Quick Tools: comma-separated IANA timezones (e.g. UTC, Europe/Berlin). Easier to manage from the Clock tab itself.",
         default: "UTC"
     },
     timerSound: {
         type: OptionType.BOOLEAN,
         description: "Play a soft chime when the Quick Tools timer reaches zero",
         default: true
+    },
+    debugThemeEditor: {
+        type: OptionType.BOOLEAN,
+        description: "Log how the dashboard measures room for Discord's theme editor (console diagnostics, off unless something looks wrong)",
+        default: false
     },
     temperatureUnit: {
         type: OptionType.SELECT,
@@ -55,5 +60,10 @@ export const settings = definePluginSettings({
             { label: "Celsius", value: "c", default: true },
             { label: "Fahrenheit", value: "f" }
         ]
+    },
+    weatherRefreshMinutes: {
+        type: OptionType.NUMBER,
+        description: "How often to refresh weather data, in minutes (minimum 5, to keep Open-Meteo usage polite)",
+        default: 10
     }
 });

@@ -7,6 +7,7 @@
 import { Logger } from "@utils/Logger";
 
 import { WeatherLocation } from "./data";
+import { settings } from "./settings";
 
 const logger = new Logger("AtAGlance");
 
@@ -17,7 +18,18 @@ const GEOCODE_ENDPOINT = "https://geocoding-api.open-meteo.com/v1/search";
 const FORECAST_ENDPOINT = "https://api.open-meteo.com/v1/forecast";
 
 const FETCH_TIMEOUT_MS = 10_000;
-const CACHE_TTL_MS = 10 * 60 * 1000;
+const MIN_REFRESH_MINUTES = 5;
+const DEFAULT_REFRESH_MINUTES = 10;
+
+// Floored here, not just in the settings UI - this is the actual gate against
+// hammering Open-Meteo, regardless of how a stale or hand-edited value got in.
+function cacheTtlMs(): number {
+    const configured = settings.store.weatherRefreshMinutes;
+    const minutes = typeof configured === "number" && Number.isFinite(configured)
+        ? configured
+        : DEFAULT_REFRESH_MINUTES;
+    return Math.max(MIN_REFRESH_MINUTES, minutes) * 60 * 1000;
+}
 
 export interface WeatherNow {
     temperatureC: number;
@@ -118,7 +130,8 @@ const weatherCache = new Map<string, WeatherNow>();
 
 /**
  * Fetches current weather for a validated location. Results are cached for
- * 10 minutes so repeatedly opening the dashboard doesn't hammer the API.
+ * the user's configured refresh interval (weatherRefreshMinutes, floor 5
+ * minutes) so repeatedly opening the dashboard doesn't hammer the API.
  */
 export async function fetchWeather(location: WeatherLocation): Promise<WeatherNow | null> {
     const lat = Math.max(-90, Math.min(90, location.lat));
@@ -126,7 +139,7 @@ export async function fetchWeather(location: WeatherLocation): Promise<WeatherNo
     const cacheKey = `${lat.toFixed(3)},${lon.toFixed(3)}`;
 
     const cached = weatherCache.get(cacheKey);
-    if (cached && Date.now() - cached.fetchedAt < CACHE_TTL_MS) return cached;
+    if (cached && Date.now() - cached.fetchedAt < cacheTtlMs()) return cached;
 
     try {
         const url = `${FORECAST_ENDPOINT}?latitude=${lat.toFixed(4)}&longitude=${lon.toFixed(4)}`
@@ -179,7 +192,7 @@ export async function fetchForecast(location: WeatherLocation): Promise<Forecast
     const cacheKey = `${lat.toFixed(3)},${lon.toFixed(3)}`;
 
     const cached = forecastCache.get(cacheKey);
-    if (cached && Date.now() - cached.fetchedAt < CACHE_TTL_MS) return cached.days;
+    if (cached && Date.now() - cached.fetchedAt < cacheTtlMs()) return cached.days;
 
     try {
         const url = `${FORECAST_ENDPOINT}?latitude=${lat.toFixed(4)}&longitude=${lon.toFixed(4)}`

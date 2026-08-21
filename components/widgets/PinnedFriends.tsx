@@ -32,7 +32,7 @@ import { movePinnedUser, setPinnedOrder, togglePinnedUser, useGlanceConfig } fro
 import { settings } from "../../settings";
 import { openChannelPopup } from "../ChannelPopup";
 import { closeGlance } from "../GlanceLayer";
-import { ChatIcon, DotsIcon, ExternalIcon, PhoneIcon } from "../icons";
+import { ArrowIcon, ChatIcon, DotsIcon, ExternalIcon, PhoneIcon } from "../icons";
 import { openPrompt } from "../PromptModal";
 import { RowDragGhost, RowDropSlot, useRowDrag } from "../rowDrag";
 import { WidgetCard } from "../WidgetCard";
@@ -58,6 +58,14 @@ const VoiceActions = findByPropsLazy("selectVoiceChannel", "selectChannel") as {
 const CallActions = findByPropsLazy("ring", "stopRinging") as {
     stopRinging(channelId: string, recipients?: string[]): void;
 };
+
+// Tiles are 36px avatar + 8px vertical padding each way = 52px, two per grid
+// row with a 6px gap. Ten tiles is five rows, which keeps the widget tall
+// enough to stay the anchor of the social column while still capping growth
+// for someone who has pinned dozens. Lower than this and a normal pin list
+// hides friends the user could previously see at a glance, which is the one
+// thing this widget must never do.
+const MAX_VISIBLE_TILES = 10;
 
 const STATUS_LABELS: Record<string, string> = {
     online: "Online",
@@ -367,12 +375,28 @@ export function PinnedFriendsWidget() {
     const { pinnedUsers } = useGlanceConfig();
     const { showOfflinePinnedUsers } = settings.use(["showOfflinePinnedUsers"]);
     const containerRef = React.useRef<HTMLDivElement>(null);
+    const [expanded, setExpanded] = React.useState(false);
     const { drag, beginPress, wasDragged } = useRowDrag({
         ids: pinnedUsers,
         containerRef,
         mode: "grid",
         onCommit: setPinnedOrder
     });
+
+    // Same "present and not offline" definition the visibility filter below
+    // uses, so the header count never disagrees with the rows under it.
+    const activeCount = useStateFromStores([PresenceStore], () => {
+        let count = 0;
+        for (const id of pinnedUsers) {
+            const s = PresenceStore.getStatus(id);
+            if (s && s !== "offline" && s !== "invisible") count++;
+        }
+        return count;
+    }, [pinnedUsers.join(",")]);
+
+    const summary = pinnedUsers.length > 0
+        ? `${pinnedUsers.length} pinned, ${activeCount} active`
+        : undefined;
 
     // Which pins actually render (offline ones can be hidden - but a ringing
     // friend always shows). Decided here, not in FriendRow, so hidden friends
@@ -392,10 +416,14 @@ export function PinnedFriendsWidget() {
     // While dragging, the grabbed tile leaves the grid (a dashed slot marks the
     // landing cell) and follows the cursor as a ghost - widget drag, tile-sized
     const visible = drag ? visibleIds.filter(id => id !== drag.id) : visibleIds;
+    // Show-more caps what's rendered, not what's tracked - the count above and
+    // the drag order both still reason about the full `visible` list.
+    const canShowMore = visible.length > MAX_VISIBLE_TILES;
+    const shown = expanded ? visible : visible.slice(0, MAX_VISIBLE_TILES);
     const rendered: React.ReactNode[] = [];
     let slotPlaced = false;
     let renderedIndex = 0;
-    for (const id of visible) {
+    for (const id of shown) {
         if (drag && renderedIndex === drag.overIndex) {
             rendered.push(<RowDropSlot key="vc-glance-friend-slot" drag={drag} />);
             slotPlaced = true;
@@ -425,7 +453,7 @@ export function PinnedFriendsWidget() {
     if (drag && !slotPlaced) rendered.push(<RowDropSlot key="vc-glance-friend-slot" drag={drag} />);
 
     return (
-        <WidgetCard id="pinned-friends">
+        <WidgetCard id="pinned-friends" summary={summary}>
             {pinnedUsers.length === 0
                 ? (
                     <div className="vc-glance-empty">
@@ -446,6 +474,17 @@ export function PinnedFriendsWidget() {
                             <div className="vc-glance-friends-tiles" ref={containerRef}>
                             {rendered}
                         </div>
+                            {canShowMore && (
+                                <button
+                                    type="button"
+                                    className="vc-glance-show-more"
+                                    aria-expanded={expanded}
+                                    onClick={() => setExpanded(v => !v)}
+                                >
+                                    {expanded ? "Show less" : `Show ${visible.length - MAX_VISIBLE_TILES} more`}
+                                    <ArrowIcon direction={expanded ? "up" : "down"} size={12} />
+                                </button>
+                            )}
                             {drag && (
                                 <RowDragGhost drag={drag}>
                                     <FriendRow userId={drag.id} isFirst isLast />

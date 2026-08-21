@@ -71,3 +71,44 @@ export function openPrompt(options: PromptOptions) {
         <PromptModalInner {...options} modalProps={modalProps} />
     ));
 }
+
+interface ConfirmOptions {
+    title: string;
+    body: string;
+    confirmText: string;
+    onConfirm: () => void;
+}
+
+function ConfirmModalInner({ title, body, confirmText, onConfirm, modalProps }: ConfirmOptions & { modalProps: RenderModalProps; }) {
+    useGlanceModalGuard();
+
+    return (
+        <Modal
+            {...modalProps}
+            size="sm"
+            title={title}
+            actions={[
+                { text: "Cancel", variant: "secondary", onClick: modalProps.onClose },
+                {
+                    text: confirmText,
+                    variant: "critical-primary",
+                    onClick: () => {
+                        onConfirm();
+                        modalProps.onClose();
+                    }
+                }
+            ]}
+        >
+            <p className="vc-glance-confirm-body">{body}</p>
+        </Modal>
+    );
+}
+
+/** Opens a small native-modal yes/no prompt for a destructive action -
+ *  never a browser confirm(), which cannot be styled or themed and stalls
+ *  the whole renderer thread while it's up. */
+export function openConfirm(options: ConfirmOptions) {
+    openGlanceModal(modalProps => (
+        <ConfirmModalInner {...options} modalProps={modalProps} />
+    ));
+}

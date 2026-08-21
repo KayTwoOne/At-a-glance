@@ -1,5 +1,177 @@
 # Changelog
 
+## 3.0.0 - 2026-08-21
+
+The dashboard's layout goes from a fixed two-column split to a free one where any
+widget can live in any column - the reason this release earns the first version
+number rather than the second.
+
+### Free layout
+- **A third column appears when there's room** (three across at wide windows, two
+  at medium, one at narrow) and folds back down without losing anything - a
+  layout built at three columns just re-flows, it never gets rewritten.
+- **Drag a widget into any column**, not just up and down within its own. A
+  widget's column is now saved per account rather than fixed by what kind of
+  widget it is, so the arrangement is entirely yours to build.
+- The **Social** and **Tools & Utilities** column headings are gone - once a
+  widget can land in either column, a heading promising one kind of content
+  stopped being true.
+- Widgets **adapt to whichever column they're sitting in**: pinned friend tiles
+  drop to one per row and the forecast strip trims a day or two once a column
+  gets narrow, reacting to the column's own width rather than the window's.
+- **Edit mode.** Drag grips are hidden until you press **Edit Layout**, so the
+  dashboard doesn't look draggable all the time. While editing, a **Reset
+  layout** / **Restore defaults** menu sits next to Done - both leave your pins,
+  notes, bookmarks, reminders and weather location untouched.
+
+### Privacy blur
+- **One button blurs the names on screen.** An eye in the top bar blurs pinned
+  friend tiles, the server names in Quick Access and your weather location, so
+  the dashboard can go on a screen share or into a screenshot without handing
+  over who you talk to and roughly where you are.
+- It stays **fully usable while it's on**. Rows still click, focus and open, so
+  it's cover for onlookers rather than a mode that takes the dashboard away
+  from the person actually using it.
+- Deliberately **not remembered between sessions**, and it clears itself when
+  the dashboard closes. The reason to turn it on is something happening right
+  now, not a preference to carry forward.
+- It is a visual filter, not a redaction: the text is still in the page
+  underneath. It hides things from a camera or a viewer, not from anyone
+  reading the DOM.
+
+### A visual system
+- Rebuilt the plugin's styling on **semantic design tokens** instead of reading
+  Discord's own CSS variables directly, so materials and colours share one
+  source of truth instead of drifting per surface.
+- **Contrast pass**: Weather's now/forecast rows and Orion's task rows sit on
+  the same row surface every other list item already uses, which is what was
+  dragging their secondary text under AA. Disabled buttons now read as clearly
+  off instead of a faded version of "on."
+- Every icon button now has a consistent **32px** interaction target, and
+  **focus rings** appear on controls that had almost none before.
+- **Acrylic and Glass materials now reach every widget.** They used to stop at
+  list rows, leaving Weather's cards and Orion's task rows solid regardless of
+  the material you picked. Acrylic now tints those too; Glass deliberately
+  leaves them on the solid row surface, since a translucent wash was dropping
+  their secondary text below AA contrast.
+- A round of light-theme fixes: dropdown menu text was rendering black on every
+  option but the selected one, the popup composer stayed bright against a dark
+  popup on a light base theme, and the seam between the dashboard panel and
+  Discord's own rail is now a gradual handoff instead of a hard line near the
+  bottom.
+
+### Widget headers
+- Every widget header now shows an **icon**, and where there's something worth
+  saying, a short **summary line** that stays visible even while the widget is
+  collapsed - Saved Messages shows its count, Pinned Friends shows how many are
+  pinned and how many are active, and so on.
+- A quiet **unread dot** appears on a collapsed header when a widget holds
+  something unread and isn't already showing a badge count, including group
+  DMs, which Discord internally files as "voice" and had been left out.
+- Pinned Friends caps its grid at ten tiles with a **Show more** toggle beyond
+  that, so pinning deep into your friends list no longer grows the card without
+  bound.
+
+### Customize panel, docked
+- **Customize is now a docked side panel instead of a modal**, open alongside
+  the dashboard, so every change previews against the real thing rather than a
+  modal floating over a frozen backdrop.
+- Every appearance control now has real structure for assistive tech: section
+  headings, grouped segmented controls, and sliders that speak their value
+  (with units) instead of leaving it visual-only. Closed two target-size gaps
+  in the panel's own controls along the way.
+
+### Stepping aside for Discord's own theme editor
+- When Discord's own "Customise your theme" panel docks alongside the
+  dashboard, the dashboard now narrows to make room instead of running
+  underneath it. Discord exposes nothing to key off directly, so this works by
+  watching the page's geometry, and this release hardened that detection
+  through several passes so it holds up across zoom levels, window resizes and
+  reopening the dashboard with the editor already open.
+
+### Quick Tools
+- **Timer and stopwatch survive a restart.** Closing Discord no longer loses a
+  running countdown or stopwatch; both pick back up from wall-clock time on
+  reload. A timer that finished while Discord was closed still fires its toast
+  and chime once you're back, but only within an hour of expiring - past that
+  it's dropped quietly instead of going off as stale noise.
+- Stopwatch gains a **Lap** button (up to twenty, cleared on Reset). Laps
+  themselves don't survive a restart, only the running or paused state does.
+- The timer's minutes/seconds fields split into three narrower **hours,
+  minutes, seconds** fields.
+- **World clock zones now live in the Clock tab** - add and remove zones
+  without leaving Quick Tools. Zone input is checked against the real IANA zone
+  list plus a small UTC/GMT allowlist, so an ambiguous abbreviation like BST can
+  no longer resolve to the wrong zone, and any zone already saved that no
+  longer resolves is dropped automatically.
+
+### Now Playing
+- The **Spotify** widget is now **Now Playing** and follows any music platform
+  Discord can see a listening activity for, not only Spotify. Spotify stays the
+  preferred source when it's available, since it carries richer data (album art,
+  a working "open in Spotify" link) than a generic Rich Presence activity does.
+
+### Weather
+- Your own **refresh interval** (five minutes minimum, to stay polite to
+  Open-Meteo) and a **last updated** line, so a forecast that hasn't refreshed
+  yet doesn't look like a live one.
+
+### Quick chat popup
+- **Quick reactions are drawn from your own emoji**, favourites first, instead
+  of six fixed unicode reactions, and are reachable from the message menu as
+  well as the hover row.
+- **Clicking a reply jumps to the message it answers** - scrolling to it and
+  highlighting it if it's already loaded in the popup, or opening the real
+  channel and jumping to it if not.
+- A real **performance fix** for sluggish scrolling: message rows are now
+  memoised so one incoming message no longer re-renders every row on screen,
+  and the backdrop no longer blurs the whole viewport on every frame.
+
+### Quick Access
+- **Text channels now list above voice channels** per server, matching
+  Discord's own sidebar order.
+- The DM bucket is renamed **Group DMs** - now that right-clicking a friend
+  pins them separately, group DMs are the only thing left there - and gets a
+  real avatar instead of a text "DM" chip.
+- Occupant avatars on a voice row now show only while it's collapsed; expanding
+  the row already lists everyone by name, so the avatars were redundant there.
+
+### Fixed
+- **"Collapse when empty" now actually collapses a widget**, instead of the
+  placeholder it shipped as in 2.9.0. It's currently wired up for Now Playing
+  only; every widget still gets the "When empty" menu, but Now Playing is the
+  one that acts on Collapse today.
+- The collapse a widget applies automatically for being empty no longer
+  overwrites your own manual collapse choice - toggling it back open now works
+  instead of getting stuck collapsed.
+- Hiding an empty widget no longer leaves a phantom gap in its column.
+- The "When empty" context menu now reflects the choice you just made instead
+  of showing a stale selection, and no longer shares its selection state across
+  different widgets.
+
+## 2.9.0 - 2026-08-03
+
+### Widget modularization
+- The three-widget **Integrations & Notes** card split into three independent widgets:
+  **Weather**, **Spotify**, and **Quick Notes** - each collapsible, hideable, and
+  draggable into any position.
+
+### Quick Tools: one tool at a time
+- **Quick Tools now shows one tool per tab** (Clock, Timer, Stopwatch, Timestamp,
+  Calculator), remembering your selection across sessions. The **Timer and
+  Stopwatch tabs display a dot** while running, so a background timer is never
+  silently hidden.
+
+### Per-widget "When empty" preference
+- All widgets now show a **"When empty"** option in their right-click menu with three choices:
+  **Keep visible** (always show), **Collapse when empty** (not yet rendering; the
+  collapse mechanism arrives in a later release), and **Hide when empty**. Spotify
+  defaults to hiding itself when nothing is playing.
+
+### Infrastructure
+- The widget registry is now an import-free module so its migration logic can be
+  verified outside the build.
+
 ## 2.8.0 - 2026-07-20
 
 ### Appearance, dialed back

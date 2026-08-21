@@ -211,6 +211,22 @@ export function VideoIcon(props: IconProps) {
     );
 }
 
+/** Open eye with an optional diagonal slash - privacy/visibility toggle.
+ *  The pupil is cut out of the outer eye shape with fillRule="evenodd"
+ *  rather than drawn as a second same-colour circle, or it would just merge
+ *  into the outline instead of reading as a hole. */
+export function EyeIcon({ slash, ...props }: IconProps & { slash?: boolean; }) {
+    return (
+        <svg {...svgProps(props)}>
+            <path
+                fillRule="evenodd"
+                d="M2 12A10 6 0 0 1 22 12 10 6 0 0 1 2 12ZM12 8.5a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7Z"
+            />
+            {slash && <path d="M4.7 3.3a1 1 0 0 0-1.4 1.4l16 16a1 1 0 0 0 1.4-1.4l-16-16Z" />}
+        </svg>
+    );
+}
+
 export function PaletteIcon(props: IconProps) {
     return (
         <svg {...svgProps(props)}>
@@ -225,6 +241,51 @@ export function ExternalIcon(props: IconProps) {
         <svg {...svgProps(props)}>
             <path d="M14 4a1 1 0 1 1 0-2h7a1 1 0 0 1 1 1v7a1 1 0 1 1-2 0V5.41l-8.3 8.3a1 1 0 0 1-1.4-1.42L18.58 4H14Z" />
             <path d="M4 6a2 2 0 0 1 2-2h4a1 1 0 1 1 0 2H6v12h12v-4a1 1 0 1 1 2 0v4a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6Z" />
+        </svg>
+    );
+}
+
+/** Two overlapping figures - people/friends */
+export function PeopleIcon(props: IconProps) {
+    return (
+        <svg {...svgProps(props)}>
+            <path d="M8 9.6a2.6 2.6 0 1 0 0-5.2 2.6 2.6 0 0 0 0 5.2ZM8 11c-3.31 0-6 2.24-6 5.5v1a1 1 0 0 0 1 1h6.5v-2a6.4 6.4 0 0 1 2.02-4.64A7.6 7.6 0 0 0 8 11ZM15.5 11.5a3.3 3.3 0 1 0 0-6.6 3.3 3.3 0 0 0 0 6.6ZM15.5 13c-3.87 0-7 2.69-7 6v1a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-1c0-3.31-3.13-6-7-6Z" />
+        </svg>
+    );
+}
+
+/** Ring-bound page - a calendar with two hangers */
+export function CalendarIcon(props: IconProps) {
+    return (
+        <svg {...svgProps(props)}>
+            <path d="M5.5 4A2.5 2.5 0 0 0 3 6.5v12A2.5 2.5 0 0 0 5.5 21h13a2.5 2.5 0 0 0 2.5-2.5v-12A2.5 2.5 0 0 0 18.5 4h-13ZM7 1.75a1 1 0 0 1 1 1V5H6V2.75a1 1 0 0 1 1-1Zm10 0a1 1 0 0 1 1 1V5h-2V2.75a1 1 0 0 1 1-1Z" />
+        </svg>
+    );
+}
+
+/** Sun with eight rays - generic weather glyph, actual conditions render as emoji in the widget body */
+export function WeatherIcon(props: IconProps) {
+    return (
+        <svg {...svgProps(props)}>
+            <path d="M12 16.2a4.2 4.2 0 1 0 0-8.4 4.2 4.2 0 0 0 0 8.4ZM11 1H13V4H11ZM11 20H13V23H11ZM1 11H4V13H1ZM20 11H23V13H20ZM3.5 3.5H5.5V5.5H3.5ZM18.5 3.5H20.5V5.5H18.5ZM3.5 18.5H5.5V20.5H3.5ZM18.5 18.5H20.5V20.5H18.5Z" />
+        </svg>
+    );
+}
+
+/** Page with a folded corner - a note */
+export function NoteIcon(props: IconProps) {
+    return (
+        <svg {...svgProps(props)}>
+            <path d="M6 2a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9.41a2 2 0 0 0-.59-1.42l-5.4-5.4A2 2 0 0 0 12.6 2H6Z" />
+        </svg>
+    );
+}
+
+/** Ascending bars - client performance / activity */
+export function PulseIcon(props: IconProps) {
+    return (
+        <svg {...svgProps(props)}>
+            <path d="M3 12a1.5 1.5 0 0 1 1.5 1.5V19a1.5 1.5 0 0 1-3 0v-5.5A1.5 1.5 0 0 1 3 12ZM10 6a1.5 1.5 0 0 1 1.5 1.5V19a1.5 1.5 0 0 1-3 0V7.5A1.5 1.5 0 0 1 10 6ZM17 9a1.5 1.5 0 0 1 1.5 1.5V19a1.5 1.5 0 0 1-3 0v-8.5A1.5 1.5 0 0 1 17 9Z" />
         </svg>
     );
 }
