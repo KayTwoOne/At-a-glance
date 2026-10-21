@@ -4,7 +4,7 @@
 
 **A customizable overview page for Discord, one tab above your Friends button.**
 
-[![Version](https://img.shields.io/badge/version-3.0.0-D33699?style=flat-square)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-3.1.0-D33699?style=flat-square)](CHANGELOG.md)
 [![Vencord](https://img.shields.io/badge/vencord%20%7C%20equicord-userplugin-9c85ef?style=flat-square)](https://vencord.dev)
 [![Discord](https://img.shields.io/badge/discord-stable-57F287?style=flat-square)](#install)
 [![License](https://img.shields.io/badge/license-GPL--3.0-blue?style=flat-square)](LICENSE)
@@ -16,9 +16,12 @@
 ---
 
 Pinned friends, watched channels, your inbox, quick tools and integrations, all on
-one page that stays inside Discord's own UI. The server rail keeps working, the
-titlebar is untouched, and everything is built on Discord's real internals: native
-message rendering, native pickers, native send pipeline.
+one page that is part of Discord's own layout, not a window floating over it. The
+server rail keeps working, the title bar and notice bar stay above it, Discord's
+theme editor docks beside it, and everything is built on Discord's real internals:
+native message rendering, native pickers, native send pipeline.
+
+<img src="assets/showcase-dashboard.png" alt="At a glance open in Discord: pinned friends, quick access, quick notes, saved messages, reminders, weather and quick tools on one page" width="100%">
 
 ## Highlights
 
@@ -40,9 +43,14 @@ message rendering, native pickers, native send pipeline.
   and your weather location for a screen share or a screenshot. Everything stays
   clickable while it's on, and it clears itself when you close the dashboard.
   Presentation cover rather than redaction - the text is still in the page.
-- **Honest security posture.** One webpack patch, one external host (Open-Meteo for
-  weather), validated storage, no eval, no token access, no automated API activity.
-  Re-audited at v2.6.3 with no security findings - details in [SECURITY.md](SECURITY.md).
+- **Discord's own saves.** Saved Messages and Reminders read your Discord
+  bookmarks and reminders, so they follow your account to every device. Bookmark
+  or set a reminder from Discord's own message menu and it shows up here, tidied
+  into neat rows. Text reminders that aren't tied to a message stay alongside them.
+- **Honest security posture.** Three small webpack patches, one external host
+  (Open-Meteo for weather), validated storage that a failed load can't overwrite, no
+  eval, no token access, no automated API activity. Re-audited at v2.6.3 with no
+  security findings - details in [SECURITY.md](SECURITY.md).
 
 ## Widgets
 
@@ -57,7 +65,8 @@ message rendering, native pickers, native send pipeline.
 | **Now Playing** | Read-only listening status from Discord's local store, following any music platform Discord can see a listening activity for (not just Spotify). Hides itself by default when nothing is playing. |
 | **Quick Notes** | Structured notes with bullets, clickable checkboxes and dividers. |
 | **Events** | Upcoming scheduled events rolled up per server, with RSVP and one-click join when live. |
-| **Saved Messages** | Bookmark any message; click jumps straight to it, highlighted, in its channel. Header shows a count. |
+| **Saved Messages** | Discord's own bookmarks, synced across your devices: bookmark with Discord's Bookmark Message, and each row shows who, where, when, a tidy two-line preview, file and link chips and your note. Click jumps straight to the message. Saves made in older versions sit under "Saved here before" until you press **Move to Discord**. |
+| **Reminders** | Discord's message reminders and your own text reminders in one list, ordered by due time with overdue first. Filter by All, Messages or Notes, and mark a Discord reminder done or snooze it straight from its row. Discord sends its own notification for those, so you only ever get one. |
 | **Client Performance** | Renderer JS-heap and UI latency. Only metrics the renderer can honestly measure. |
 | **Orion** _(optional, off by default)_ | Remote control for the separate OrionQuests plugin: status pill, Start / Stop / Status buttons, live per-quest progress. Enable it under **Add Widget**; inert unless OrionQuests is also installed. |
 
@@ -65,6 +74,8 @@ There's also a command palette (default `Shift+Space`), a quick-pin hotkey
 (default `Ctrl+Shift+P`), a greeting header that counts your mentions, unread DMs
 and channels - click the summary to open a notification panel with per-item
 dismiss and "Mark all read" - and an optional open-on-startup mode.
+
+<img src="assets/showcase-saved-and-reminders.png" alt="Saved Messages showing Discord bookmarks with previews, chips and a note, beside Reminders mixing Discord reminders with a text note" width="100%">
 
 ## Orion add-on (optional)
 
@@ -124,19 +135,27 @@ Dev loop: edit, `pnpm build` (or `pnpm dev` for watch), `Ctrl+R` in Discord.
 
 ## Architecture & security
 
-One webpack patch inserts the sidebar tab (the same anchor Vencord's own PinDMs
-uses); everything else goes through stable Vencord APIs. Config is validated and
-capped on every load (IDs, notes text, weather location, layout state only) and
-stored per account in IndexedDB. Message sending, blocking, calls, notes and RSVP
+Three small webpack patches, each its own entry, so one failing after a Discord
+update costs only its own part. One inserts the sidebar tab (the same anchor
+Vencord's own PinDMs uses). One renders the dashboard as a cell of Discord's own
+app grid, inside Discord's React tree rather than a separate root, so Discord's
+layout places it. One puts a `data-vc-glance-panels` marker on Discord's user
+panel so it can be hidden while the dashboard is open, without relying on a
+guessed class name. Everything else goes through stable Vencord APIs. Config is
+validated and capped on every load (IDs, notes text, weather location, layout
+state only) and stored per account in IndexedDB, and nothing is written until
+that account's data has loaded. Message sending, blocking, calls, notes and RSVP
 all invoke the same action creators Discord's own UI uses - always user-initiated,
 never on a timer, so there's no self-bot / rate-limit exposure. Every widget sits
-in an error boundary (the injected tab a no-op one), so one broken internal never
-takes the page - or Discord - down.
+in an error boundary (the injected tab and dashboard host no-op ones), so one
+broken internal never takes the page - or Discord - down.
 
 Re-audited at v2.6.3 (2026-07-15) with no security findings: no token access, no
 `eval`/`innerHTML`/injection sinks, one opt-in external host (Open-Meteo, pinned
 and allowlisted), and balanced listeners/timers that are fully torn down on
-disable. Full write-up in **[SECURITY.md](SECURITY.md)**.
+disable. Full write-up in **[SECURITY.md](SECURITY.md)**, which also notes what
+3.1.0 changed (the layout host and the load and save path) and that those parts
+were checked against the code rather than re-audited.
 
 Known limitations live at the bottom of [SETUP.md](SETUP.md#troubleshooting); the
 short version is that the popup renders messages outside Discord's full list

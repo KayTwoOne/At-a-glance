@@ -23,15 +23,16 @@ find, and every alt-tab is a chance to lose the thread of a conversation.
 **Social.** Pinned Friends with live presence and activity. Quick Access Channels
 for the handful of channels you actually read, grouped by server with unread and
 mention counts. Inbox for mentions and unread DMs, with dismissal that works
-whether or not the widget is on screen. Saved Messages, for anything you
-right-click and keep. Upcoming Events.
+whether or not the widget is on screen. Saved Messages, reading Discord's own
+bookmarks. Upcoming Events.
 
 **Integrations.** Weather from Open-Meteo, the only external host the plugin is
 allowed to contact. Now Playing, following any music platform Discord can see a
 listening activity for, not just Spotify. Quick Notes with checkboxes, autosaved.
 
 **Utilities.** Clock, countdown timer with an audible chime, stopwatch, Discord
-timestamp generator, calculator. Reminders, timed or untimed. Client performance.
+timestamp generator, calculator. Reminders, timed or untimed, beside Discord's own message
+reminders. Client performance.
 
 **Navigation.** A command palette on Shift+Space that searches friends, channels
 and actions. A quick chat popup that opens a conversation in place, so you can
@@ -113,10 +114,22 @@ AA on a translucent wash.
 
 ## How it is built
 
-A Vencord userplugin with a single webpack patch, deliberately. One patch that
-adds a tab is recoverable when Discord changes; a patch that rewrites the main
-content area takes the whole client down with it. If the patch ever breaks, the
-tab disappears and nothing else does.
+A Vencord userplugin with three small webpack patches, deliberately. Each one
+inserts something into Discord's code rather than rewriting any of it. One adds
+the tab above Friends. One renders the dashboard as another cell of Discord's own
+app grid, inside Discord's own React tree, so Discord's layout does the placing:
+right of the server rail, under the title bar and any notice bar, and narrowed by
+the theme editor when that docks. The plugin does not measure Discord's title bar
+or rails, or watch the page, to find its place. The third puts a
+`data-vc-glance-panels` marker on Discord's user panel, so the dashboard can hide
+that panel by the marker instead of by a hashed class name.
+
+Each patch is its own entry, so when Discord changes one of them the loss stays
+small. A patch that rewrites the main content area takes the whole client down
+with it, which is the reason none of these do. If the first breaks, the tab
+disappears. If the second breaks, opening the dashboard says it couldn't open
+instead of leaving a blank page. If the third breaks, Discord's own user panel
+stays visible. Nothing else goes with them.
 
 Configuration lives in IndexedDB through Vencord's DataStore and is rebuilt by
 allowlist on every load. Stored data is never spread into a config object, so a
@@ -124,11 +137,21 @@ corrupted or tampered record cannot inject keys. Schema changes ship with
 migrations that preserve layout position rather than appending new widgets to the
 bottom of somebody's dashboard.
 
-There is no test runner. Verification is four gates: TypeScript, eslint, a
-production build, and a script that evaluates the built bundle outside Discord to
-catch top-level webpack access, which is the failure mode that silently kills
-every plugin at once. Migration logic lives in an import-free module so a fifth
-script can assert it under node.
+Nothing is written until the current account's data has loaded, and only ever to
+that account. A failed read shows as a failed read, with a Try again button and
+automatic retries, rather than as an empty dashboard that the next click would
+save over the real one. That load and save logic lives in an import-free module
+so it can be tested with fake storage and fake timers.
+
+Verification is a set of gates: TypeScript, eslint, unit tests under
+`node --test` (the load and save logic, the contrast maths, the accent tokens and
+the toast call), a production build, and a script that evaluates the built bundle
+outside Discord to catch top-level webpack access, which is the failure mode that
+silently kills every plugin at once. Migration logic also lives in an import-free
+module so a separate script can assert it under node. Everything the plugin asks
+of Discord's own code - its patches, its lookups and the layout line names its
+CSS sits on - is one list, `discordChecks.ts`, which is checked against Discord's
+current client before each release.
 
 ## Compatibility
 

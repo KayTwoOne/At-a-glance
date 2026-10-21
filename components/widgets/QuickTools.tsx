@@ -5,7 +5,7 @@
  */
 
 import { copyToClipboard } from "@utils/clipboard";
-import { moment, React, showToast, Toasts } from "@webpack/common";
+import { moment, React } from "@webpack/common";
 
 import {
     getQuickToolsTab,
@@ -24,6 +24,7 @@ import { settings } from "../../settings";
 import { Dropdown } from "../Dropdown";
 import { useNow } from "../hooks";
 import { CloseIcon } from "../icons";
+import { glanceToast } from "../toast";
 import { WidgetCard } from "../WidgetCard";
 
 /**
@@ -441,9 +442,11 @@ const timerStore = persistentState<TimerState>({ hours: "0", minutes: "5", secon
 
 /** Writes the full TimerState - unlike the stopwatch there's nothing to
  *  exclude, the input fields are as cheap to keep as endsAt. Called only from
- *  armTimer/stopTimer, never per tick. */
-function persistTimer(t: TimerState) {
-    setTimerState({ hours: t.hours, minutes: t.minutes, seconds: t.seconds, endsAt: t.endsAt });
+ *  armTimer/stopTimer and the two completion paths, never per tick. Arm and
+ *  cancel are the user's own changes, so a refused write says so; a
+ *  completion is not, so those callers pass `quiet`. */
+function persistTimer(t: TimerState, quiet = false) {
+    setTimerState({ hours: t.hours, minutes: t.minutes, seconds: t.seconds, endsAt: t.endsAt }, quiet);
 }
 
 // The completion side-effects (clear, toast, chime) are driven by a module-level
@@ -462,14 +465,16 @@ const MISSED_TIMER_GRACE_MS = 60 * 60 * 1000;
 /** The user-facing half of a completion, split out so the catch-up path on
  *  load can clear storage first and only then decide whether to announce. */
 function announceTimerFinished() {
-    showToast("⏰ Quick Tools timer finished!", Toasts.Type.SUCCESS);
+    glanceToast("⏰ Quick Tools timer finished!", "success");
     if (settings.store.timerSound) playTimerChime();
 }
 
 function completeTimer() {
     timerHandle = null;
     timerStore.set(t => ({ ...t, endsAt: null }));
-    persistTimer(timerStore.get());
+    // Quiet: a countdown that ends while the store is idle, loading or failed
+    // is not a change the user made, so no "that change wasn't kept" toast
+    persistTimer(timerStore.get(), true);
     announceTimerFinished();
 }
 
@@ -538,7 +543,7 @@ function resumeTimer(saved: PersistedTimerState) {
     // Clearing first makes this self-limiting whatever else happens.
     const overdueBy = Date.now() - saved.endsAt;
     timerStore.set(t => ({ ...t, endsAt: null }));
-    persistTimer(timerStore.get());
+    persistTimer(timerStore.get(), true);
 
     // A missed completion is still worth hearing, but only while it could
     // plausibly still matter. Past the grace window it is discarded quietly:
@@ -762,8 +767,8 @@ function TimestampBuilder() {
         // clipboard API is unreliable inside the desktop sandbox) and the web
         // clipboard in the browser build.
         copyToClipboard(code)
-            .then(() => showToast("Timestamp copied - paste it into any chat.", Toasts.Type.SUCCESS))
-            .catch(() => showToast("Couldn't copy to clipboard.", Toasts.Type.FAILURE));
+            .then(() => glanceToast("Timestamp copied - paste it into any chat.", "success"))
+            .catch(() => glanceToast("Couldn't copy to clipboard.", "failure"));
     };
 
     return (

@@ -4,10 +4,9 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-import { Toasts } from "@webpack/common";
-
 import { PlayIcon, StopIcon } from "../icons";
 import { OrionTask, useOrion } from "../orionBridge";
+import { glanceToast } from "../toast";
 import { WidgetCard } from "../WidgetCard";
 
 /** COMPLETED/CLAIMED read as done, QUEUE/RUNNING as active, anything else neutral */
@@ -36,10 +35,6 @@ function TaskRow({ task }: { task: OrionTask; }) {
             </div>
         </div>
     );
-}
-
-function toast(message: string, type: string) {
-    Toasts.show({ message, type, id: Toasts.genId() });
 }
 
 export function OrionWidget() {
@@ -80,16 +75,16 @@ export function OrionWidget() {
             : "vc-glance-orion-state-idle";
 
     const start = async () => {
-        if (!(await orion.start())) toast("Orion couldn't start.", Toasts.Type.FAILURE);
+        if (!(await orion.start())) glanceToast("Orion couldn't start.", "failure");
     };
 
     const stop = () => {
-        if (!orion.stop()) toast("Orion couldn't stop.", Toasts.Type.FAILURE);
+        if (!orion.stop()) glanceToast("Orion couldn't stop.", "failure");
     };
 
     const status = () => {
         const summary = orion.summary();
-        toast(summary ?? "Orion status is unavailable.", summary ? Toasts.Type.MESSAGE : Toasts.Type.FAILURE);
+        glanceToast(summary ?? "Orion status is unavailable.", summary ? "message" : "failure");
     };
 
     return (

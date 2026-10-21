@@ -29,6 +29,7 @@ import {
 } from "@webpack/common";
 
 import { movePinnedUser, setPinnedOrder, togglePinnedUser, useGlanceConfig } from "../../data";
+import { finders } from "../../discordChecks";
 import { settings } from "../../settings";
 import { openChannelPopup } from "../ChannelPopup";
 import { closeGlance } from "../GlanceLayer";
@@ -41,21 +42,21 @@ const logger = new Logger("AtAGlance");
 
 // Discord's relationship action creators: blockUser, ignoreUser,
 // updateRelationship (friend nickname PATCH), etc.
-const RelationshipActions = findByPropsLazy("updateRelationship", "blockUser") as {
+const RelationshipActions = findByPropsLazy(...finders.relationshipActions.props) as {
     blockUser(userId: string, context: { location: string; }): void;
     ignoreUser(userId: string, location?: string): Promise<unknown>;
     unignoreUser(userId: string, location?: string): Promise<unknown>;
     updateRelationship(userId: string, nickname: string | null): Promise<unknown>;
 };
 
-const NoteStore = findStoreLazy("NoteStore") as { getNote(userId: string): any; };
+const NoteStore = findStoreLazy(finders.noteStore.name) as { getNote(userId: string): any; };
 
 // Answering = joining the ringing DM call's channel; declining = the same
 // stop-ringing action Discord's own call UI dispatches
-const VoiceActions = findByPropsLazy("selectVoiceChannel", "selectChannel") as {
+const VoiceActions = findByPropsLazy(...finders.voiceActions.props) as {
     selectVoiceChannel(channelId: string): void;
 };
-const CallActions = findByPropsLazy("ring", "stopRinging") as {
+const CallActions = findByPropsLazy(...finders.callActions.props) as {
     stopRinging(channelId: string, recipients?: string[]): void;
 };
 

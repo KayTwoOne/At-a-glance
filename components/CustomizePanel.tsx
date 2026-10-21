@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-import { React, showToast, Toasts } from "@webpack/common";
+import { React } from "@webpack/common";
 
 import {
     DEFAULT_APPEARANCE,
@@ -17,6 +17,7 @@ import {
 } from "../data";
 import { GLANCE_PRESETS } from "../presets";
 import { ArrowIcon, CloseIcon } from "./icons";
+import { glanceToast } from "./toast";
 
 const MATERIAL_LABELS: Record<GlanceMaterial, string> = {
     classic: "Classic",
@@ -137,7 +138,7 @@ function CustomizePanelBody() {
                                     title={preset.label}
                                     onClick={() => {
                                         setAppearance(preset.apply);
-                                        showToast(`Applied ${preset.label}`, Toasts.Type.SUCCESS);
+                                        glanceToast(`Applied ${preset.label}`, "success");
                                     }}
                                 >
                                     <span

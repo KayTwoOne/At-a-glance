@@ -5,35 +5,34 @@
  */
 
 import ErrorBoundary from "@components/ErrorBoundary";
-import { Logger } from "@utils/Logger";
 import {
     AccessibilityStore,
     ContextMenuApi,
-    createRoot,
     FluxDispatcher,
     Menu,
     NavigationRouter,
     React,
-    showToast,
-    Toasts,
     Tooltip
 } from "@webpack/common";
 
 import {
+    LoadState,
     MAX_COLUMNS,
     resetLayout,
     restoreDefaults,
+    retryLoadConfig,
     setColumnOrder,
     setWidgetColumn,
     toggleWidgetHidden,
     useGlanceConfig,
+    useGlanceLoadState,
     useOrderedWidgets,
     WIDGET_META,
     WidgetId,
     widgetsInColumn } from "../data";
 import { matchesKeyboardCombo } from "../hotkeys";
 import { settings } from "../settings";
-import { useAppearance, useOnLightTheme } from "./appearance";
+import { useAppearance } from "./appearance";
 import { closeChannelPopup, isChannelPopupOpen } from "./ChannelPopup";
 import { CommandPalette } from "./CommandPalette";
 import { closeCustomizePanel, CustomizePanel, openCustomizePanel } from "./CustomizePanel";
@@ -42,6 +41,7 @@ import { useColumnCount } from "./hooks";
 import { CheckIcon, DashboardIcon, DotsIcon, EyeIcon, GripIcon, PaletteIcon, PlusIcon } from "./icons";
 import { openConfirm } from "./PromptModal";
 import { RailUserStrip } from "./RailUserStrip";
+import { glanceToast } from "./toast";
 import { BookmarksWidget } from "./widgets/Bookmarks";
 import { ClientPerfWidget } from "./widgets/ClientPerf";
 import { EventsWidget } from "./widgets/Events";
@@ -54,8 +54,6 @@ import { QuickToolsWidget } from "./widgets/QuickTools";
 import { RemindersWidget } from "./widgets/Reminders";
 import { SpotifyWidget } from "./widgets/Spotify";
 import { WeatherWidget } from "./widgets/Weather";
-
-const logger = new Logger("AtAGlance");
 
 const WIDGET_RENDERERS: Record<WidgetId, () => React.ReactNode> = {
     "pinned-friends": () => <PinnedFriendsWidget />,
@@ -71,6 +69,37 @@ const WIDGET_RENDERERS: Record<WidgetId, () => React.ReactNode> = {
     "client-perf": () => <ClientPerfWidget />,
     "orion": () => <OrionWidget />
 };
+
+/* ========== enabled flag ========== */
+
+// Patches persist until Discord restarts, so after the plugin stops, the
+// sidebar tab and the host are still rendered by Discord. Opening the dashboard
+// then would show "Loading your dashboard" for ever, because stop() reset the
+// store. This flag says whether the plugin is running: start() sets it, stop()
+// clears it, and while it is false the tab renders nothing and nothing opens.
+let glanceEnabled = false;
+const enabledListeners = new Set<() => void>();
+
+export function setGlanceEnabled(enabled: boolean) {
+    if (glanceEnabled === enabled) return;
+    glanceEnabled = enabled;
+    // A startup open still waiting for the host is moot once the plugin stops
+    if (!enabled) cancelPendingOpen();
+    for (const listener of [...enabledListeners]) {
+        try {
+            listener();
+        } catch { }
+    }
+}
+
+export function useGlanceEnabled() {
+    const [, forceUpdate] = React.useReducer(x => x + 1, 0);
+    React.useEffect(() => {
+        enabledListeners.add(forceUpdate);
+        return () => void enabledListeners.delete(forceUpdate);
+    }, []);
+    return glanceEnabled;
+}
 
 /* ========== open/close state ========== */
 
@@ -157,453 +186,94 @@ export function usePrivacyMode() {
     return privacyMode;
 }
 
-/* ========== native chrome handling ========== */
+/* ========== host: a cell of Discord's own app grid ========== */
+
+// How many hosts are mounted. The AppView patch renders exactly one; zero
+// means Discord's layout changed under the patch.
+let hostCount = 0;
 
 /**
- * Finds Discord's draggable top chrome (OS titlebar strip and, in the visual
- * refresh, the app toolbar row below it). The overlay starts underneath them
- * so window dragging and the min/max/close buttons keep working.
+ * Rendered by the AppView patch (discordChecks.ts) as a child of Discord's
+ * content subgrid. Discord's layout places and sizes it - right of the guild
+ * rail, under the title and notice bars, beside the theme editor when that
+ * docks - so nothing here measures anything. Being in Discord's own tree
+ * also gives the dashboard Discord's context providers.
  */
-function measureTopChrome(): { top: number; bars: HTMLElement[]; } {
-    const bars: HTMLElement[] = [];
-    let top = 0;
-    try {
-        for (const y of [6, 26, 44, 64]) {
-            for (const el of document.elementsFromPoint(window.innerWidth * 0.6, y)) {
-                const html = el as HTMLElement;
-                if (html.closest(".vc-glance-overlay")) continue;
-                if (bars.includes(html)) continue;
-                if (getComputedStyle(html).getPropertyValue("-webkit-app-region") === "drag") {
-                    bars.push(html);
-                    top = Math.max(top, html.getBoundingClientRect().bottom);
-                }
-            }
+export function GlanceHost() {
+    const open = useGlanceOpen();
+    React.useEffect(() => {
+        hostCount++;
+        // A startup open was waiting for this host to mount
+        if (pendingOpen) {
+            cancelPendingOpen();
+            openGlance();
         }
-    } catch (e) {
-        logger.error("Failed to measure top chrome", e);
-    }
-    return { top, bars };
-}
-
-let hiddenToolbar: HTMLElement | null = null;
-
-/**
- * Blanks the app toolbar's channel-specific contents (the ".kay in a DM" info)
- * while the overlay is open, keeping the bar itself for styling and window
- * dragging. Only done when the OS titlebar (window buttons) is a SEPARATE bar,
- * so window controls can never be hidden by accident.
- */
-function coverToolbar(bars: HTMLElement[]) {
-    if (bars.length < 2) return;
-    const toolbar = bars.reduce((a, b) =>
-        a.getBoundingClientRect().bottom >= b.getBoundingClientRect().bottom ? a : b
-    );
-    toolbar.setAttribute("data-vc-glance-chrome", "");
-    hiddenToolbar = toolbar;
-}
-
-function uncoverToolbar() {
-    hiddenToolbar?.removeAttribute("data-vc-glance-chrome");
-    hiddenToolbar = null;
-}
-
-/* ========== native theme editor handling ========== */
-
-/* Two earlier attempts tried to IDENTIFY Discord's "Customise your theme"
-   panel by its shape and both failed. The first required position fixed or
-   absolute, which never matches: the panel pushes Discord's content aside
-   rather than floating over it, so it is an in-flow sibling and computes as
-   static. Relaxing that check is worse, not better - with the dashboard open,
-   the page behind it is usually Friends, whose "Active Now" rail is also
-   docked right, also full height, and also about 340px. Shape cannot tell the
-   two apart.
-
-   So this measures the CHANGE instead. Where docked right-side chrome begins
-   is baselined when the overlay opens, while no editor can be open. Anything
-   that later claims more of that edge moves the boundary left, and THAT delta
-   is the panel. Active Now is in the baseline, so it can never be mistaken for
-   the editor.
-
-   A fifth problem showed up once the first four were fixed: opening from a
-   tab with no rail of its own (Quests) rather than one that already has
-   Active Now (Friends) baselines against the bare window, because
-   openGlance() starts watching before its own navigation to Friends has
-   rendered anything. Active Now then mounts a beat later, the boundary walks
-   left exactly like a panel appearing would, and the dashboard opens
-   squashed. THEME_EDITOR_SETTLE_MS below gives the page a short window to
-   actually settle before any delta from it is trusted. */
-
-// Below this, a shift is noise (a scrollbar, a hover chrome change), not a
-// docked panel worth reflowing the whole dashboard for.
-const THEME_EDITOR_MIN_DELTA = 120;
-// Widest thing still credible as a docked rail. Deliberately absolute: rails
-// are a fixed size regardless of window width.
-const RAIL_MAX_WIDTH = 520;
-// However confident the measurement, never surrender more than one panel's
-// worth of the dashboard. A runaway walk should cost a stripe, not the view.
-const THEME_EDITOR_MAX_INSET = 560;
-// openGlance() navigates to Friends and starts watching in the same tick,
-// before Friends has rendered - so its "Active Now" rail mounts a beat later
-// and the boundary walks left as the page catches up, not because a panel
-// appeared. This window gives it that beat before any delta is trusted. 600ms
-// comfortably covers a route transition plus one render (both normally land
-// in well under half that even on a slow machine) while staying short enough
-// that a theme editor genuinely already open when the overlay opens - see
-// themeEditorBaselineKnown, which is what actually keeps that case safe - is
-// only briefly unrecognised rather than left overlapping for a while.
-const THEME_EDITOR_SETTLE_MS = 600;
-
-// The last inset we actually applied, remembered ACROSS overlay close/reopen
-// (the module outlives the overlay). Reopening while the editor is already up
-// captures a baseline that already contains it, so the delta is zero and the
-// dashboard would overlap the editor again. This is what we knew last time.
-let lastThemeEditorInset = 0;
-
-/**
- * The leftmost edge of a rail whose right edge sits at `rightEdge`, if any.
- * Returned RAW, not rounded to a pixel: `measureRightBoundary` rounds it
- * where it needs an integer to chain hops with, but hands the first hop's
- * unrounded value back to its own caller too, so a caller sizing an inset off
- * it can round toward more space instead of inheriting whatever direction
- * Math.round happened to pick.
- */
-function railLeftEdgeAt(rightEdge: number): number | null {
-    let leftmost: number | null = null;
-    const x = Math.round(rightEdge) - 3;
-    if (x < 0) return null;
-
-    // Several heights, the way measureTopChrome samples several depths: one
-    // sample can land on a tooltip or a rounded corner and miss the rail.
-    for (const fraction of [0.3, 0.5, 0.7]) {
-        const y = Math.round(window.innerHeight * fraction);
-        for (const el of document.elementsFromPoint(x, y)) {
-            const html = el as HTMLElement;
-            if (html === document.documentElement || html === document.body) continue;
-            // Our own overlay is on top of everything; never measure ourselves
-            if (html.closest(".vc-glance-overlay")) continue;
-
-            const rect = html.getBoundingClientRect();
-            const endsHere = Math.abs(rect.right - rightEdge) <= 4;
-            const tall = rect.height >= window.innerHeight * 0.5;
-            // An absolute cap, not a fraction of the window. Discord's rails are
-            // a fixed size (Active Now about 420, the theme editor about 340)
-            // and do not grow with the window. A percentage let the friends
-            // list itself qualify on a wide screen, so the walk hopped straight
-            // through the page and squashed the dashboard against the left.
-            const isRail = rect.width > 0 && rect.width <= RAIL_MAX_WIDTH;
-
-            if (endsHere && tall && isRail) {
-                leftmost = leftmost === null ? rect.left : Math.min(leftmost, rect.left);
-            }
-        }
-    }
-    return leftmost;
-}
-
-/** What `measureRightBoundary` found: the walked boundary for DETECTING a
- *  change, plus the outermost rail's own raw left edge for SIZING one. */
-interface RightBoundary {
-    boundary: number;
-    outermostLeft: number | null;
-}
-
-/**
- * Where the contiguous stack of docked right-side rails begins, and where the
- * single rail actually touching the window's right edge begins.
- *
- * Walking the whole stack matters for `boundary`, and getting this wrong is
- * what broke an earlier attempt. Measuring only the outermost rail looks
- * correct until the theme editor opens: it takes the window edge and shoves
- * "Active Now" inward, so Active Now stops touching the edge and drops out of
- * the measurement. The boundary then moves RIGHT (1713 to about 1790 on a
- * 2133px window), which reads as the chrome shrinking rather than a panel
- * appearing. Following each rail to the next one left keeps the whole stack
- * in view, so a new panel can only ever push the boundary further left.
- *
- * `outermostLeft` is just the FIRST hop of that same walk, kept raw instead of
- * rounded. It is one direct measurement of a single rail's edge, with none of
- * the second (or third) hop's rounding and tolerance-matching slack folded in
- * on top. See applyThemeEditorInset for why that distinction is the fix.
- */
-function measureRightBoundary(): RightBoundary {
-    let boundary = window.innerWidth;
-    let outermostLeft: number | null = null;
-    try {
-        // Bounded: MAX_COLUMNS-ish depth is plenty for real chrome, and a cap
-        // means a pathological layout can never spin here.
-        for (let hops = 0; hops < 5; hops++) {
-            const left = railLeftEdgeAt(boundary);
-            if (left === null || left >= boundary) break;
-            if (hops === 0) outermostLeft = left;
-            boundary = Math.round(left);
-        }
-    } catch (e) {
-        logger.error("Failed to measure the right boundary", e);
-        return { boundary: window.innerWidth, outermostLeft: null };
-    }
-    return { boundary, outermostLeft };
-}
-
-function themeEditorDebug(message: string, detail: Record<string, unknown>) {
-    // Read defensively: a setting added after a user's config was written can
-    // come back undefined, and a diagnostic that silently no-ops is worse than
-    // useless when it is the only thing telling us why a feature does nothing.
-    if (settings.store.debugThemeEditor !== true) return;
-    logger.info(`[theme editor] ${message}`, detail);
-}
-
-let themeEditorObserver: MutationObserver | null = null;
-let themeEditorDebounce: ReturnType<typeof setTimeout> | null = null;
-let themeEditorResizeHandler: (() => void) | null = null;
-let themeEditorWidth = 0;
-// Where docked right-side chrome sat when the overlay opened. null until first
-// measured; reset on close so a stale baseline can never survive into a new
-// session with a different window size or page.
-let themeEditorBaseline: number | null = null;
-// Wall-clock deadline for the settling window a call to watchThemeEditor()
-// starts. Checked fresh against Date.now() from inside
-// applyThemeEditorInset() on every call rather than driven by a timer of its
-// own: the mutation observer's debounce below already calls that function
-// repeatedly while the page is still moving (that is what settling needs to
-// observe in the first place), so the window just stops being honoured once
-// the clock runs out instead of needing something to notice and flip it off.
-let themeEditorSettleUntil = 0;
-// True once this session's baseline is a KNOWN value rather than a first
-// guess - specifically, once the "restored from a previous session" branch
-// below has fired. Settling exists only to smooth over an ambiguous first
-// guess; a restored baseline is not a guess, it is memory of where the editor
-// actually was. Without this, the settling window's leftward tracking would
-// walk that restored baseline straight back down to the raw boundary on the
-// very next mutation and undo the fix restoring it was for.
-let themeEditorBaselineKnown = false;
-
-/** Pulls the overlay's right edge in by the panel's measured width, or lets it go full width again. */
-function applyThemeEditorInset() {
-    if (!overlayContainer) return;
-
-    const { boundary, outermostLeft } = measureRightBoundary();
-
-    // A baseline wider than the window is impossible and means it was captured
-    // at a different window size (dragging between monitors, or any resize).
-    // Left alone it poisons every later delta: a 2273px baseline on a 2133px
-    // window reads as ~1000px of panel and squashes the dashboard, and because
-    // the inset is remembered, reopening cannot clear it either.
-    if (themeEditorBaseline !== null && themeEditorBaseline > window.innerWidth) {
-        themeEditorDebug("baseline discarded, wider than the window", {
-            baseline: themeEditorBaseline, window: window.innerWidth
-        });
-        themeEditorBaseline = null;
-        lastThemeEditorInset = 0;
-        themeEditorBaselineKnown = false;
-    }
-
-    // First measurement of this overlay session. If we insetted last time and
-    // the same amount of rail is still there, the editor never closed while we
-    // were away: hold that width OUT of the baseline, or it gets treated as
-    // normal chrome and the dashboard overlaps the editor exactly as it did
-    // before this was handled.
-    if (themeEditorBaseline === null && lastThemeEditorInset > 0) {
-        themeEditorBaseline = boundary + lastThemeEditorInset;
-        themeEditorBaselineKnown = true;
-        themeEditorDebug("baseline restored from a previous session", {
-            boundary, carried: lastThemeEditorInset, baseline: themeEditorBaseline
-        });
-    }
-
-    // Whether an ambiguous first guess is still being smoothed out - see
-    // THEME_EDITOR_SETTLE_MS. A known baseline (just restored above) never
-    // enters settling: there is nothing ambiguous left to smooth over, and
-    // letting it settle anyway would immediately undo the restore.
-    const settling = !themeEditorBaselineKnown && Date.now() < themeEditorSettleUntil;
-
-    if (settling) {
-        // Still arriving: follow the boundary in EITHER direction as rails
-        // mount, rather than only ratcheting outward. This is what makes
-        // Active Now mounting a beat late read as "the page wasn't ready yet"
-        // instead of "a 420px panel appeared".
-        if (themeEditorBaseline === null || boundary !== themeEditorBaseline) {
-            themeEditorDebug("baseline settling", { boundary, previous: themeEditorBaseline });
-            themeEditorBaseline = boundary;
-        }
-    } else if (themeEditorBaseline === null || boundary > themeEditorBaseline) {
-        // The boundary can legitimately move RIGHT: navigating away from a
-        // view that had a rail, or collapsing the member list. That is a new
-        // normal, not an editor closing, so the baseline follows it up. Once
-        // settling is over it only ever ratchets outward, which is what keeps
-        // a genuine editor readable as a leftward delta rather than being
-        // absorbed into the baseline.
-        themeEditorDebug("baseline set", { boundary, previous: themeEditorBaseline });
-        themeEditorBaseline = boundary;
-    }
-
-    // The delta only ever DETECTS that a panel appeared; it must not also be
-    // used to SIZE the gap for it. It is the difference between two walks
-    // that can each be a hop or two deep, and every hop both rounds a
-    // fractional getBoundingClientRect value and matches "ends here" within a
-    // 4px tolerance. That slack is harmless for a yes/no detection but shows
-    // up directly as an undersized inset if it is spent on the width too -
-    // which is exactly how "Customise" ended up clipped by a few pixels.
-    const delta = themeEditorBaseline - boundary;
-    // While settling, whatever the delta says is not trusted enough to act
-    // on. Failure here costs nothing, same as any other low-confidence
-    // measurement below: no inset rather than a wrong one.
-    const editorPresent = !settling && delta >= THEME_EDITOR_MIN_DELTA;
-
-    // Once a panel is confirmed, size off ONE direct measurement instead: the
-    // outermost rail - the one actually touching the window's right edge - is
-    // the same rail the walk above visits first, so this costs nothing extra.
-    // Ceil, not round: a sub-pixel edge must always cost a little too MUCH gap,
-    // never a little too little, or the same wrong-direction rounding just
-    // moves here instead of going away.
-    let width = 0;
-    let insetSource: "settling" | "not-detected" | "no-measurement" | "outermost-edge" | "clamped" =
-        settling ? "settling" : "not-detected";
-    if (editorPresent) {
-        if (outermostLeft === null) {
-            // Delta says a panel is there but the direct measurement came back
-            // empty (a mid-mutation DOM read, most likely). No confident
-            // measurement means no inset, same as if nothing had been detected.
-            insetSource = "no-measurement";
-        } else {
-            const measured = Math.ceil(window.innerWidth - outermostLeft);
-            // Clamped: a measurement gone wrong should cost a stripe of the
-            // dashboard, never the whole view. One panel's worth is the most
-            // that can ever be legitimate here.
-            width = Math.min(measured, THEME_EDITOR_MAX_INSET);
-            insetSource = measured > THEME_EDITOR_MAX_INSET ? "clamped" : "outermost-edge";
-        }
-    }
-
-    themeEditorDebug("measured", {
-        boundary, baseline: themeEditorBaseline, delta, outermostLeft, settling, source: insetSource, applying: width
-    });
-
-    if (width === themeEditorWidth) return;
-    themeEditorWidth = width;
-    lastThemeEditorInset = width;
-    overlayContainer.style.right = width > 0 ? `${width}px` : "";
-    themeEditorDebug("applied", { right: overlayContainer.style.right || "(full width)" });
-}
-
-/**
- * Watches the app root for the editor panel mounting or unmounting so the
- * overlay can react without polling. Geometry is cheap to re-check but not
- * free, so bursts of unrelated mutations (message list virtualisation, typing
- * indicators, the dashboard's own drag-and-drop) are coalesced into one
- * recheck ~120ms after things go quiet rather than one per mutation record.
- */
-function watchThemeEditor() {
-    const root = document.getElementById("app-mount") ?? document.body;
-    const observer = new MutationObserver(() => {
-        if (themeEditorDebounce) clearTimeout(themeEditorDebounce);
-        themeEditorDebounce = setTimeout(() => {
-            themeEditorDebounce = null;
-            applyThemeEditorInset();
-        }, 120);
-    });
-    try {
-        observer.observe(root, { childList: true, subtree: true });
-    } catch (e) {
-        logger.error("Failed to watch for the theme editor panel", e);
-        return;
-    }
-    themeEditorObserver = observer;
-
-    // A baseline only describes one window size. Resizing, or dragging between
-    // monitors, invalidates it completely: the old value survived into the new
-    // window and every delta after that was measured against a boundary that no
-    // longer existed. Throw it away and measure the new window fresh.
-    themeEditorResizeHandler = () => {
-        themeEditorBaseline = null;
-        lastThemeEditorInset = 0;
-        themeEditorWidth = 0;
-        if (overlayContainer) overlayContainer.style.right = "";
-        themeEditorDebug("window resized, re-baselining", { window: window.innerWidth });
-        applyThemeEditorInset();
-    };
-    window.addEventListener("resize", themeEditorResizeHandler);
-
-    // Opens this session's settling window - see THEME_EDITOR_SETTLE_MS. Must
-    // be set before the synchronous measurement just below, since that first
-    // call is itself allowed to settle.
-    themeEditorSettleUntil = Date.now() + THEME_EDITOR_SETTLE_MS;
-    themeEditorBaselineKnown = false;
-
-    // Synchronous initial measurement so an already-open editor narrows the
-    // overlay before its first paint, instead of opening full width and
-    // jumping narrow a moment later.
-    applyThemeEditorInset();
-
-    // One unconditional line per open. Two silent failures of this feature were
-    // impossible to tell apart from the code never running at all, so this
-    // proves it ran and states what it saw. The per-change detail stays behind
-    // the debug setting; this is the heartbeat.
-    logger.info(
-        `[theme editor] watching. baseline ${themeEditorBaseline}px, window ${window.innerWidth}px, `
-        + `settling for ${THEME_EDITOR_SETTLE_MS}ms unless already known.`
-        + " Enable the theme editor debug setting for per-change detail."
+        return () => void hostCount--;
+    }, []);
+    if (!open) return null;
+    return (
+        <div className="vc-glance-host">
+            <SafeGlanceLayer />
+        </div>
     );
 }
-
-function stopWatchingThemeEditor() {
-    themeEditorBaseline = null;
-    themeEditorSettleUntil = 0;
-    themeEditorBaselineKnown = false;
-    if (themeEditorResizeHandler) {
-        window.removeEventListener("resize", themeEditorResizeHandler);
-        themeEditorResizeHandler = null;
-    }
-    themeEditorObserver?.disconnect();
-    themeEditorObserver = null;
-    if (themeEditorDebounce) {
-        clearTimeout(themeEditorDebounce);
-        themeEditorDebounce = null;
-    }
-    themeEditorWidth = 0;
-    if (overlayContainer) overlayContainer.style.right = "";
-}
-
-/* ========== mount / unmount ========== */
-
-let overlayRoot: ReturnType<typeof createRoot> | null = null;
-let overlayContainer: HTMLDivElement | null = null;
 
 export function openGlance() {
-    if (layerOpen) return;
+    if (!glanceEnabled || layerOpen) return;
+    // Land on the neutral DM home underneath, so no user-DM state lingers
+    // anywhere in the chrome and GlanceTab (the channel popup's host) is mounted
     try {
-        // Land on the neutral DM home underneath, so no user-DM state lingers
-        // anywhere in the chrome - this view is its own thing
-        try {
-            NavigationRouter.transitionTo("/channels/@me");
-        } catch { }
+        NavigationRouter.transitionTo("/channels/@me");
+    } catch { }
+    // Lets CSS hide Discord's own user panel while RailUserStrip replaces it
+    document.body.setAttribute("data-vc-glance-open", "");
+    openedAt = Date.now();
+    const thisOpen = openedAt;
+    setLayerOpen(true);
+    // No host means the AppView patch did not apply: say so rather than
+    // leave the tab looking selected over an unchanged page.
+    setTimeout(() => {
+        if (layerOpen && openedAt === thisOpen && hostCount === 0) {
+            closeGlance();
+            glanceToast("At a glance could not open - Discord's layout has changed.", "failure");
+        }
+    }, 2000);
+}
 
-        const { top, bars } = measureTopChrome();
-        coverToolbar(bars);
+// The startup open. It differs from openGlance in one way: it does not trust
+// openGlance's 2 s no-host check. On a cold start, a slow disk or the first run
+// after an update, Discord's AppView can commit later than that, and the check
+// would close the dashboard and claim the layout had changed when it had not. So
+// if no host is mounted yet, this waits for GlanceHost to mount and only gives up
+// after a much longer fallback. User-initiated opens (the sidebar tab) keep the
+// short check, because by then the app has long since rendered.
+const PENDING_OPEN_FALLBACK_MS = 20_000;
+let pendingOpen = false;
+let pendingOpenTimer: ReturnType<typeof setTimeout> | null = null;
 
-        overlayContainer = document.createElement("div");
-        overlayContainer.className = "vc-glance-overlay";
-        overlayContainer.style.top = `${top}px`;
-        (document.getElementById("app-mount") ?? document.body).appendChild(overlayContainer);
-        // Before the first render, so a theme editor already open narrows the
-        // overlay from its very first paint instead of opening full width
-        // and snapping narrow a frame later.
-        watchThemeEditor();
-        overlayRoot = createRoot(overlayContainer);
-        overlayRoot.render(<SafeGlanceLayer />);
-        // Lets CSS hide Discord's own bottom-left user panel (and its game
-        // activity chip) while our rail strip replaces it
-        document.body.setAttribute("data-vc-glance-open", "");
-        openedAt = Date.now();
-        setLayerOpen(true);
-    } catch (e) {
-        logger.error("Failed to mount overlay", e);
-        showToast("At a glance could not open - Discord internals may have changed.", Toasts.Type.FAILURE);
-        uncoverToolbar();
-        stopWatchingThemeEditor();
-        overlayContainer?.remove();
-        overlayContainer = null;
-        overlayRoot = null;
+function cancelPendingOpen() {
+    pendingOpen = false;
+    if (pendingOpenTimer !== null) {
+        clearTimeout(pendingOpenTimer);
+        pendingOpenTimer = null;
     }
+}
+
+export function openGlanceWhenReady() {
+    if (!glanceEnabled) return;
+    if (hostCount > 0) {
+        openGlance();
+        return;
+    }
+    cancelPendingOpen();
+    pendingOpen = true;
+    pendingOpenTimer = setTimeout(() => {
+        pendingOpenTimer = null;
+        // GlanceHost clears the flag when it mounts, so a set flag means it never did
+        if (!pendingOpen) return;
+        pendingOpen = false;
+        glanceToast("At a glance could not open - Discord's layout has changed.", "failure");
+    }, PENDING_OPEN_FALLBACK_MS);
 }
 
 export function closeGlance() {
@@ -612,28 +282,10 @@ export function closeGlance() {
     setEditMode(false);
     setPrivacyMode(false);
     closeCustomizePanel();
-    uncoverToolbar();
-    stopWatchingThemeEditor();
     document.body.removeAttribute("data-vc-glance-open");
-
-    const root = overlayRoot;
-    const container = overlayContainer;
-    overlayRoot = null;
-    overlayContainer = null;
-
-    // Deferred so unmounting never happens synchronously from inside one of
-    // the overlay's own event handlers
-    setTimeout(() => {
-        try {
-            root?.unmount();
-        } catch (e) {
-            logger.error("Failed to unmount overlay", e);
-        }
-        container?.remove();
-    }, 0);
 }
 
-/** Called from the plugin's stop() so a disabled plugin never leaves a dead overlay behind */
+/** Called from the plugin's stop() so a disabled plugin never leaves the dashboard open, or Discord's user panel hidden */
 export function closeGlanceIfOpen() {
     if (layerOpen) closeGlance();
 }
@@ -1003,14 +655,43 @@ function WidgetColumn({ column, renderedCount, drag }: { column: number; rendere
     );
 }
 
+/* ========== load states ========== */
+
+/** Shown instead of the workspace until this account's data has loaded. An
+ *  empty grid in its place would look exactly like lost data. */
+function LoadStatePanel({ state }: { state: LoadState; }) {
+    if (state === "failed") {
+        return (
+            <div className="vc-glance-load-failed" role="alert">
+                <svg className="vc-glance-load-icon" width="38" height="38" viewBox="0 0 38 38" fill="none" aria-hidden="true">
+                    <rect x="5" y="9" width="28" height="22" rx="5" stroke="currentColor" strokeWidth="2" />
+                    <path d="M5 15h28" stroke="currentColor" strokeWidth="2" />
+                    <path d="M19 20v4.5M19 27.5v.5" stroke="var(--vcg-t-text-primary)" strokeWidth="2.4" strokeLinecap="round" />
+                </svg>
+                <h2 className="vc-glance-load-title">Your dashboard couldn't be loaded</h2>
+                <p className="vc-glance-load-body">Nothing has been changed or lost. At a glance will keep trying, or you can try now.</p>
+                <button className="vc-glance-button vc-glance-button-brand" onClick={() => void retryLoadConfig()}>
+                    Try again
+                </button>
+            </div>
+        );
+    }
+    return (
+        <div className="vc-glance-load-pending" role="status">
+            <span className="vc-glance-load-spinner" aria-hidden="true" />
+            Loading your dashboard
+        </div>
+    );
+}
+
 /* ========== the layer ========== */
 
 function GlanceLayer() {
     const { tabLabel } = settings.use(["tabLabel"]);
     const { hiddenWidgets } = useGlanceConfig();
-    const { materialClass, style: appearanceStyle } = useAppearance();
-    const onLightTheme = useOnLightTheme();
+    const { materialClass, style: appearanceStyle, onLightTheme } = useAppearance();
     const privacyMode = usePrivacyMode();
+    const loadState = useGlanceLoadState();
     const [paletteOpen, setPaletteOpen] = React.useState(false);
     const paletteOpenRef = React.useRef(false);
     paletteOpenRef.current = paletteOpen;
@@ -1057,7 +738,7 @@ function GlanceLayer() {
 
         // The home / Direct-Messages button in the guild rail navigates to
         // /channels/@me - where we already are - so it fires no CHANNEL_SELECT
-        // and the overlay would just sit there. Close on it (and any explicit
+        // and the dashboard would just sit there. Close on it (and any explicit
         // home/Friends link) so it behaves like leaving a page. Capture phase +
         // a tick's delay so Discord's own navigation still runs and lands you
         // back on Friends. HOME_SELECTOR stays broad on purpose (Discord's ids
@@ -1070,30 +751,19 @@ function GlanceLayer() {
             }
         }
 
-        function onResize() {
-            if (overlayContainer) overlayContainer.style.top = `${measureTopChrome().top}px`;
-            // The editor's own width (and whether it still passes the
-            // full-height check) can change with the window, same as the
-            // top chrome above
-            applyThemeEditorInset();
-        }
-
         window.addEventListener("keydown", onKeyDown);
-        window.addEventListener("resize", onResize);
         window.addEventListener("click", onNavClick, true);
         FluxDispatcher.subscribe("CHANNEL_SELECT", onChannelSelect);
         return () => {
             window.removeEventListener("keydown", onKeyDown);
-            window.removeEventListener("resize", onResize);
             window.removeEventListener("click", onNavClick, true);
             FluxDispatcher.unsubscribe("CHANNEL_SELECT", onChannelSelect);
-            // Covers the overlay being removed by any path other than closeGlance()
+            // Covers the dashboard unmounting by any path other than closeGlance(),
+            // for example the host unmounting along with AppView
             setLayerOpen(false);
             setEditMode(false);
             setPrivacyMode(false);
             closeCustomizePanel();
-            uncoverToolbar();
-            stopWatchingThemeEditor();
             document.body.removeAttribute("data-vc-glance-open");
             // Don't let a still-open popup auto-reappear next time we open
             closeChannelPopup();
@@ -1168,7 +838,7 @@ function GlanceLayer() {
                     <ErrorBoundary noop>
                         <GlanceHeader onSearch={() => setPaletteOpen(true)} />
                     </ErrorBoundary>
-                    <Workspace />
+                    {loadState === "ready" ? <Workspace /> : <LoadStatePanel state={loadState} />}
                 </div>
             </div>
 
@@ -1190,9 +860,10 @@ function GlanceLayer() {
                 </ErrorBoundary>
             )}
 
-            {/* The channel popup host lives in GlanceTab (Discord's tree), not
-                here: this layer is its own React root without Discord's context
-                providers, and the expression picker/autocomplete need them. */}
+            {/* The channel popup host stays in GlanceTab: GlanceTab is always
+                mounted while the dashboard is open (openGlance lands on
+                /channels/@me), and it was already in Discord's tree before the
+                dashboard was. */}
         </div>
     );
 }

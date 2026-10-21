@@ -8,17 +8,19 @@ import { Logger } from "@utils/Logger";
 import { findByPropsLazy, findStoreLazy } from "@webpack";
 import { ChannelStore, FluxDispatcher, ReadStateStore, useStateFromStores } from "@webpack/common";
 
+import { finders } from "../discordChecks";
+
 const logger = new Logger("AtAGlance");
 
 // Discord's own Inbox internals: the store updates itself in realtime as new
 // mentions arrive, the actions hit the same endpoints the native Inbox uses
-export const RecentMentionsStore = findStoreLazy("RecentMentionsStore") as {
+export const RecentMentionsStore = findStoreLazy(finders.recentMentionsStore.name) as {
     getMentions(): any[] | null;
     hasLoadedEver: boolean;
     loading: boolean;
 };
 
-export const MentionActions = findByPropsLazy("fetchRecentMentions", "deleteRecentMention") as {
+export const MentionActions = findByPropsLazy(...finders.mentionActions.props) as {
     fetchRecentMentions(options: { limit?: number; guildId?: string | null; roles?: boolean; everyone?: boolean; }): Promise<unknown>;
     deleteRecentMention(messageId: string): void;
     clearMentions(): void;

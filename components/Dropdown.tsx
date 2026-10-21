@@ -27,9 +27,13 @@ interface DropdownProps {
  * OS's default (light) chrome, which is unreadable over Discord's dark UI.
  *
  * The menu is portaled to <body> and positioned `fixed` off the trigger's
- * rect: widget cards animate in with a lingering `translateY(0)` transform,
- * which would otherwise make the menu a *containing block* child and push it
- * off-screen. The portal escapes every ancestor transform/overflow.
+ * rect. Cards no longer carry a transform (the entrance animation and the
+ * hover lift both move `top`), but the drag ghost still does, and a
+ * transformed ancestor becomes the containing block for a `position: fixed`
+ * child and pushes it off-screen. The portal escapes every ancestor
+ * transform and overflow. Outside the layer the menu also loses the
+ * accent variables the layer (or the channel popup) sets inline, so the two
+ * that colour its active item are copied across whenever it is positioned.
  */
 export function Dropdown({ options, value, onChange, ariaLabel, className }: DropdownProps) {
     // The menu is portaled past .vc-glance-layer's DOM subtree (see below), so
@@ -38,7 +42,7 @@ export function Dropdown({ options, value, onChange, ariaLabel, className }: Dro
     const onLightTheme = useOnLightTheme();
     const [open, setOpen] = React.useState(false);
     const [activeIndex, setActiveIndex] = React.useState(0);
-    const [rect, setRect] = React.useState<{ top: number; left: number; width: number; } | null>(null);
+    const [rect, setRect] = React.useState<{ top: number; left: number; width: number; accentUi: string; onAccent: string; } | null>(null);
     const rootRef = React.useRef<HTMLDivElement>(null);
     const triggerRef = React.useRef<HTMLButtonElement>(null);
     const menuRef = React.useRef<HTMLDivElement>(null);
@@ -50,7 +54,17 @@ export function Dropdown({ options, value, onChange, ariaLabel, className }: Dro
 
         const update = () => {
             const r = triggerRef.current?.getBoundingClientRect();
-            if (r) setRect({ top: r.bottom + 4, left: r.left, width: r.width });
+            if (!r) return;
+            // Inherited from whichever root hosts this dropdown, so the menu
+            // follows the same accent as the trigger it opened from
+            const inherited = rootRef.current ? getComputedStyle(rootRef.current) : null;
+            setRect({
+                top: r.bottom + 4,
+                left: r.left,
+                width: r.width,
+                accentUi: inherited?.getPropertyValue("--vcg-accent-ui").trim() ?? "",
+                onAccent: inherited?.getPropertyValue("--vcg-on-accent").trim() ?? ""
+            });
         };
         update();
 
@@ -104,12 +118,22 @@ export function Dropdown({ options, value, onChange, ariaLabel, className }: Dro
         }
     };
 
+    // The accent variables are only set when the dropdown actually inherited
+    // them; without them the menu's own token falls back to Discord's brand
+    const menuStyle = rect && ({
+        top: rect.top,
+        left: rect.left,
+        width: rect.width,
+        ...(rect.accentUi ? { "--vcg-accent-ui": rect.accentUi } : {}),
+        ...(rect.onAccent ? { "--vcg-on-accent": rect.onAccent } : {})
+    } as React.CSSProperties);
+
     const menu = open && rect && (
         <div
             ref={menuRef}
             className={"vc-glance-dropdown-menu" + (onLightTheme ? " vc-glance-on-light" : "")}
             role="listbox"
-            style={{ top: rect.top, left: rect.left, width: rect.width }}
+            style={menuStyle ?? undefined}
         >
             {options.map((option, i) => (
                 <button

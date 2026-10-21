@@ -8,6 +8,8 @@ import * as DataStore from "@api/DataStore";
 import { Logger } from "@utils/Logger";
 import { React, UserStore } from "@webpack/common";
 
+import { glanceToast } from "./components/toast";
+import { createConfigStore, LoadState } from "./storeCore";
 import {
     DEFAULT_HIDDEN_WIDGETS,
     DEFAULT_STOPWATCH_STATE,
@@ -190,10 +192,6 @@ function freshConfig(): GlanceConfig {
 }
 
 let config: GlanceConfig = freshConfig();
-// The account the in-memory config belongs to. Mutations are not persisted
-// until a load for a known account has happened, so one account's data can
-// never be written to another account's storage key.
-let loadedForUser: string | null = null;
 
 const listeners = new Set<() => void>();
 
@@ -205,8 +203,9 @@ const listeners = new Set<() => void>();
 type ConfigLoadListener = (loaded: GlanceConfig) => void;
 const configLoadListeners = new Set<ConfigLoadListener>();
 
-/** Runs once per loadConfig() resolution (startup, reconnect, account switch),
- *  after `config` has already been replaced with the freshly loaded snapshot. */
+/** Runs once per actual load (startup, account switch), after `config` has
+ *  already been replaced with the freshly loaded snapshot. A same-account
+ *  reconnect re-reads nothing, so it does not run this. */
 export function onConfigLoad(listener: ConfigLoadListener): () => void {
     configLoadListeners.add(listener);
     return () => void configLoadListeners.delete(listener);
@@ -229,6 +228,85 @@ function emit() {
             logger.error("Config listener errored", e);
         }
     }
+}
+
+const store = createConfigStore<GlanceConfig>({
+    read: key => DataStore.get(key),
+    write: (key, value) => DataStore.set(key, value),
+    remove: key => DataStore.del(key),
+    currentUserId: () => {
+        const id = UserStore.getCurrentUser()?.id;
+        return id && SNOWFLAKE_RE.test(id) ? id : null;
+    },
+    keyFor: storageKey,
+    legacyKeyFor: legacyStorageKey,
+    sanitize: sanitizeConfig,
+    fresh: freshConfig,
+    setTimer: (fn, ms) => setTimeout(fn, ms),
+    clearTimer: handle => clearTimeout(handle as ReturnType<typeof setTimeout>),
+    onError: (message, error) => logger.error(message, error),
+    onLoaded: loaded => {
+        // Listeners may call getConfig(), so `config` is current before they run
+        config = loaded;
+        for (const listener of [...configLoadListeners]) {
+            try {
+                listener(loaded);
+            } catch (e) {
+                logger.error("Config load listener errored", e);
+            }
+        }
+    },
+    onChange: () => {
+        config = store.get();
+        emit();
+    }
+});
+
+export type { LoadState };
+
+/** Loads this account's saved data on startup and on an account switch. A
+ *  reconnect for the account already loaded only saves pending edits and does
+ *  not re-read. */
+export function loadConfig(): Promise<void> {
+    return store.load();
+}
+
+/** The failed-state "Try again" button. */
+export function retryLoadConfig(): Promise<void> {
+    return store.retryNow();
+}
+
+/** On logout: lands any pending save, then forgets the account. */
+export function resetConfig(): Promise<void> {
+    return store.reset();
+}
+
+function persist(debounceMs = 0) {
+    store.persist(debounceMs);
+}
+
+let lastUnsavedToast = 0;
+
+/**
+ * Whether a change can be kept right now. Until this account's saved data
+ * has loaded, nothing may change it: the change would be lost when the data
+ * arrives, or worse, saved over it. Says so at most once every 5 seconds;
+ * `quiet` callers (the reminder scheduler) never toast.
+ */
+export function canWriteConfig(quiet = false): boolean {
+    if (store.canWrite()) return true;
+    if (!quiet && Date.now() - lastUnsavedToast > 5000) {
+        lastUnsavedToast = Date.now();
+        glanceToast("At a glance hasn't loaded your saved data yet, so that change wasn't kept.", "failure");
+    }
+    return false;
+}
+
+/** The layer's loading/failed states. */
+export function useGlanceLoadState(): LoadState {
+    const [, forceUpdate] = React.useReducer(x => x + 1, 0);
+    React.useEffect(() => subscribe(forceUpdate), []);
+    return store.state();
 }
 
 function sanitizeIdList(value: unknown, max: number): string[] {
@@ -392,6 +470,7 @@ export function isBookmarked(messageId: string) {
 }
 
 export function addBookmark(bookmark: Omit<GlanceBookmark, "savedAt">) {
+    if (!canWriteConfig()) return;
     if (isBookmarked(bookmark.messageId)) return;
     if (config.bookmarks.length >= MAX_BOOKMARKS) {
         logger.warn("Bookmark list is full");
@@ -405,6 +484,7 @@ export function addBookmark(bookmark: Omit<GlanceBookmark, "savedAt">) {
 }
 
 export function removeBookmark(messageId: string) {
+    if (!canWriteConfig()) return;
     const index = config.bookmarks.findIndex(b => b.messageId === messageId);
     if (index === -1) return;
     config.bookmarks.splice(index, 1);
@@ -415,6 +495,7 @@ export function removeBookmark(messageId: string) {
 /* ---- reminders ---- */
 
 export function addReminder(text: string, dueAt: number | null) {
+    if (!canWriteConfig()) return;
     const [clean] = sanitizeReminders([{
         id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
         text,
@@ -429,6 +510,7 @@ export function addReminder(text: string, dueAt: number | null) {
 }
 
 export function removeReminder(id: string) {
+    if (!canWriteConfig()) return;
     const index = config.reminders.findIndex(r => r.id === id);
     if (index === -1) return;
     config.reminders.splice(index, 1);
@@ -437,6 +519,7 @@ export function removeReminder(id: string) {
 }
 
 export function snoozeReminder(id: string, ms: number) {
+    if (!canWriteConfig()) return;
     const reminder = config.reminders.find(r => r.id === id);
     if (!reminder) return;
     reminder.dueAt = Date.now() + ms;
@@ -447,6 +530,7 @@ export function snoozeReminder(id: string, ms: number) {
 
 /** Marks a reminder's desktop notification as fired (scheduler bookkeeping) */
 export function markReminderNotified(id: string) {
+    if (!canWriteConfig(true)) return;
     const reminder = config.reminders.find(r => r.id === id);
     if (!reminder || reminder.notified) return;
     reminder.notified = true;
@@ -464,55 +548,10 @@ export function pendingReminderNotifications(now = Date.now()): GlanceReminder[]
 }
 
 export function setAppearance(patch: Partial<GlanceAppearance>) {
+    if (!canWriteConfig()) return;
     config.appearance = sanitizeAppearance({ ...config.appearance, ...patch });
     emit();
     persist(200);
-}
-
-export async function loadConfig() {
-    const meId = UserStore.getCurrentUser()?.id;
-    if (!meId || !SNOWFLAKE_RE.test(meId)) return;
-
-    try {
-        let raw = await DataStore.get(storageKey(meId));
-        if (raw === undefined) {
-            // One-time migration from the old "Dashboard" plugin name
-            raw = await DataStore.get(legacyStorageKey(meId));
-            if (raw !== undefined) {
-                await DataStore.set(storageKey(meId), sanitizeConfig(raw));
-                await DataStore.del(legacyStorageKey(meId)).catch(() => { });
-            }
-        }
-        config = sanitizeConfig(raw);
-        loadedForUser = meId;
-    } catch (e) {
-        logger.error("Failed to load config", e);
-        config = freshConfig();
-        loadedForUser = meId;
-    }
-    for (const listener of [...configLoadListeners]) {
-        try {
-            listener(config);
-        } catch (e) {
-            logger.error("Config load listener errored", e);
-        }
-    }
-    emit();
-}
-
-let persistTimeout: ReturnType<typeof setTimeout> | undefined;
-
-function persist(debounceMs = 0) {
-    if (!loadedForUser) return;
-    clearTimeout(persistTimeout);
-    persistTimeout = setTimeout(async () => {
-        if (!loadedForUser) return;
-        try {
-            await DataStore.set(storageKey(loadedForUser), config);
-        } catch (e) {
-            logger.error("Failed to save config", e);
-        }
-    }, debounceMs);
 }
 
 export function getConfig(): GlanceConfig {
@@ -540,6 +579,7 @@ export function isChannelWatched(channelId: string) {
 }
 
 function toggleId(list: string[], id: string, max: number) {
+    if (!canWriteConfig()) return;
     if (!SNOWFLAKE_RE.test(id)) return;
 
     const index = list.indexOf(id);
@@ -579,6 +619,7 @@ function isPermutation(current: string[], next: string[]): boolean {
 
 /** Replaces the pinned-friends order wholesale (drag & drop commit) */
 export function setPinnedOrder(orderedIds: string[]) {
+    if (!canWriteConfig()) return;
     if (!isPermutation(config.pinnedUsers, orderedIds)) return;
     config.pinnedUsers = [...orderedIds];
     emit();
@@ -588,6 +629,7 @@ export function setPinnedOrder(orderedIds: string[]) {
 /** Replaces the watched-channel order wholesale (server drag & drop commit -
  *  section order is derived from where each server's channels first appear) */
 export function setWatchedChannelsOrder(orderedIds: string[]) {
+    if (!canWriteConfig()) return;
     if (!isPermutation(config.watchedChannels, orderedIds)) return;
     config.watchedChannels = [...orderedIds];
     emit();
@@ -604,6 +646,7 @@ export function moveWatchedChannel(id: string, delta: -1 | 1, subsetIds: string[
 }
 
 function moveWithinSubset(master: string[], id: string, delta: -1 | 1, subsetIds: string[]) {
+    if (!canWriteConfig()) return;
     const subsetPos = subsetIds.indexOf(id);
     const neighborId = subsetIds[subsetPos + delta];
     if (subsetPos === -1 || neighborId === undefined) return;
@@ -618,6 +661,7 @@ function moveWithinSubset(master: string[], id: string, delta: -1 | 1, subsetIds
 }
 
 export function setNotes(text: string) {
+    if (!canWriteConfig()) return;
     if (typeof text !== "string") return;
     config.notes = text.slice(0, MAX_NOTES_LENGTH);
     // No emit: notes are edited through a controlled textarea; re-rendering
@@ -626,12 +670,14 @@ export function setNotes(text: string) {
 }
 
 export function setWeatherLocation(location: WeatherLocation | null) {
+    if (!canWriteConfig()) return;
     config.weatherLocation = location === null ? null : sanitizeLocation(location);
     emit();
     persist();
 }
 
 export function toggleWidgetHidden(id: WidgetId) {
+    if (!canWriteConfig()) return;
     if (!WIDGET_IDS.includes(id)) return;
     const index = config.hiddenWidgets.indexOf(id);
     if (index === -1) config.hiddenWidgets.push(id);
@@ -645,6 +691,7 @@ export function isWidgetCollapsed(id: WidgetId) {
 }
 
 export function toggleWidgetCollapsed(id: WidgetId) {
+    if (!canWriteConfig()) return;
     if (!WIDGET_IDS.includes(id)) return;
     const index = config.collapsedWidgets.indexOf(id);
     if (index === -1) config.collapsedWidgets.push(id);
@@ -658,6 +705,7 @@ export function getEmptyBehaviour(id: WidgetId): WidgetEmptyBehaviour {
 }
 
 export function setEmptyBehaviour(id: WidgetId, value: WidgetEmptyBehaviour) {
+    if (!canWriteConfig()) return;
     config.widgetEmptyBehaviour = sanitizeEmptyBehaviour({ ...config.widgetEmptyBehaviour, [id]: value });
     emit();
     persist();
@@ -671,6 +719,7 @@ export function getWidgetColumn(id: WidgetId): number {
  *  call here is a computed value (a drop target, a keyboard move) - it just
  *  needs its bounds respected, not to be thrown out wholesale. */
 export function setWidgetColumn(id: WidgetId, column: number) {
+    if (!canWriteConfig()) return;
     if (!WIDGET_IDS.includes(id)) return;
     config.widgetColumns = { ...config.widgetColumns, [id]: clampNumber(column, 0, MAX_COLUMNS - 1, 0) };
     emit();
@@ -681,6 +730,7 @@ export function setWidgetColumn(id: WidgetId, column: number) {
  *  only. Everything else - pins, notes, hidden widgets, bookmarks, reminders,
  *  the weather location - is content, not layout, and stays put. */
 export function resetLayout() {
+    if (!canWriteConfig()) return;
     config.widgetOrder = [...WIDGET_IDS];
     config.widgetColumns = { ...SEED_COLUMNS };
     emit();
@@ -691,6 +741,7 @@ export function resetLayout() {
  *  "start over" action, not just an arrangement undo. Still leaves pins,
  *  notes, bookmarks, reminders and the weather location alone. */
 export function restoreDefaults() {
+    if (!canWriteConfig()) return;
     config.widgetOrder = [...WIDGET_IDS];
     config.widgetColumns = { ...SEED_COLUMNS };
     config.hiddenWidgets = [...DEFAULT_HIDDEN_WIDGETS];
@@ -703,6 +754,7 @@ export function getQuickToolsTab(): QuickToolId {
 }
 
 export function setQuickToolsTab(id: QuickToolId) {
+    if (!canWriteConfig()) return;
     config.quickToolsTab = sanitizeQuickToolsTab(id);
     emit();
     persist();
@@ -715,8 +767,11 @@ export function getTimerState(): PersistedTimerState {
 /** Deliberately no emit(): nothing outside Quick Tools' own module-local
  *  listeners reads timerState, and QuickTools.tsx only calls this at arm/
  *  cancel - waking the whole useGlanceConfig() tree on every one of those
- *  would be the exact per-render cost this split was built to avoid. */
-export function setTimerState(state: PersistedTimerState) {
+ *  would be the exact per-render cost this split was built to avoid.
+ *  `quiet` is for a countdown finishing in the background: the user made no
+ *  change then, so a refused write must not toast "that change wasn't kept". */
+export function setTimerState(state: PersistedTimerState, quiet = false) {
+    if (!canWriteConfig(quiet)) return;
     config.timerState = sanitizeTimerState(state);
     persist();
 }
@@ -728,6 +783,7 @@ export function getStopwatchState(): PersistedStopwatchState {
 /** Same reasoning as setTimerState: called only at start/pause/reset, never
  *  per tick, and never needs to wake anything outside Quick Tools itself. */
 export function setStopwatchState(state: PersistedStopwatchState) {
+    if (!canWriteConfig()) return;
     config.stopwatchState = sanitizeStopwatchState(state);
     persist();
 }
@@ -738,6 +794,7 @@ export function isGuildCollapsed(guildKey: string) {
 
 /** Collapse/expand a Quick Access server section (guild snowflake, or "dm") */
 export function toggleGuildCollapsed(guildKey: string) {
+    if (!canWriteConfig()) return;
     if (!GUILD_COLLAPSE_KEY_RE.test(guildKey)) return;
     const index = config.collapsedGuilds.indexOf(guildKey);
     if (index === -1) config.collapsedGuilds.push(guildKey);
@@ -748,6 +805,7 @@ export function toggleGuildCollapsed(guildKey: string) {
 
 /** Replaces one column's ordering wholesale (drag & drop commit) */
 export function setColumnOrder(column: number, orderedIds: WidgetId[]) {
+    if (!canWriteConfig()) return;
     const valid = orderedIds.filter(id => getWidgetColumn(id) === column);
     const others = config.widgetOrder.filter(id => getWidgetColumn(id) !== column);
     config.widgetOrder = sanitizeWidgetOrder([...valid, ...others]);

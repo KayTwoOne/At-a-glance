@@ -134,6 +134,15 @@ function openCardMenu(e: React.MouseEvent, id: WidgetId) {
     ContextMenuApi.openContextMenu(e, () => <CardMenu id={id} />);
 }
 
+/**
+ * Parts of the header that own their own click. Anything else in the header
+ * (title, summary, badge, icon, the empty space between them) toggles the card.
+ * The actions slot is listed as a whole, so a gap between two of its buttons does
+ * nothing rather than collapsing the card under a near-miss.
+ */
+const HEADER_OWN_CLICK =
+    'button, a, input, textarea, select, [role="button"], [role="menuitem"], .vc-glance-card-grip, .vc-glance-card-actions';
+
 /** Shared shell for all widgets: card surface, collapsible header, drag handle, error isolation */
 export function WidgetCard({ id, label, actions, summary, indicator = false, attention = 0, empty = false, children }: WidgetCardProps) {
     // Subscribing here keeps collapse state live without prop-drilling
@@ -162,13 +171,26 @@ export function WidgetCard({ id, label, actions, summary, indicator = false, att
     const resolvedLabel = label ?? meta?.label ?? id;
     const Icon = meta ? WIDGET_ICONS[meta.icon] : undefined;
 
-    // The chevron and title share this: when the only reason the card looks
-    // collapsed is the empty-behaviour default (not the user's own stored
-    // choice), the click is about peeking at that state this session, not
+    // The chevron and the rest of the header share this: when the only reason the
+    // card looks collapsed is the empty-behaviour default (not the user's own
+    // stored choice), the click is about peeking at that state this session, not
     // about rewriting the stored preference.
     const handleToggle = () => {
         if (autoCollapsed && !collapsed) setPeeking(p => !p);
         else toggleWidgetCollapsed(id);
+    };
+
+    // The whole header is the target, not just the title text. A click that began
+    // on a control inside it (the chevron, the options button, an action, the drag
+    // grip) belongs to that control, so it is left alone; the chevron toggles
+    // through its own onClick and must not also toggle here. The match is bounded
+    // to this header so a card nested in some outer button or link cannot swallow
+    // the click. Keyboard access stays on the chevron: the header itself has no
+    // tabIndex or role, so it adds no second tab stop.
+    const handleHeaderClick = (e: React.MouseEvent<HTMLElement>) => {
+        const owner = (e.target as Element).closest(HEADER_OWN_CLICK);
+        if (owner && e.currentTarget.contains(owner)) return;
+        handleToggle();
     };
 
     return (
@@ -180,7 +202,7 @@ export function WidgetCard({ id, label, actions, summary, indicator = false, att
             }
             onContextMenu={e => openCardMenu(e, id)}
         >
-            <header className="vc-glance-card-header">
+            <header className="vc-glance-card-header" onClick={handleHeaderClick}>
                 <button
                     className="vc-glance-card-collapse"
                     aria-label={showCollapsed ? `Expand ${resolvedLabel}` : `Collapse ${resolvedLabel}`}
@@ -204,7 +226,7 @@ export function WidgetCard({ id, label, actions, summary, indicator = false, att
                 )}
                 {Icon && <Icon className="vc-glance-card-icon" size={16} />}
                 <div className="vc-glance-card-heading">
-                    <h2 className="vc-glance-card-title" onClick={handleToggle}>
+                    <h2 className="vc-glance-card-title">
                         {resolvedLabel}
                     </h2>
                     {/* Renders collapsed AND expanded - a collapsed card that says nothing

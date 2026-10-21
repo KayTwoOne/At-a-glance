@@ -17,9 +17,10 @@ import {
     useStateFromStores
 } from "@webpack/common";
 
+import { finders } from "../discordChecks";
 import { GearIcon, HeadphonesIcon, MicIcon } from "./icons";
 
-const AudioActions = findByPropsLazy("toggleSelfMute", "toggleSelfDeaf") as {
+const AudioActions = findByPropsLazy(...finders.audioActions.props) as {
     toggleSelfMute(): void;
     toggleSelfDeaf(): void;
 };

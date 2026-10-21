@@ -48,11 +48,6 @@ export const settings = definePluginSettings({
         description: "Play a soft chime when the Quick Tools timer reaches zero",
         default: true
     },
-    debugThemeEditor: {
-        type: OptionType.BOOLEAN,
-        description: "Log how the dashboard measures room for Discord's theme editor (console diagnostics, off unless something looks wrong)",
-        default: false
-    },
     temperatureUnit: {
         type: OptionType.SELECT,
         description: "Temperature unit for the weather card",

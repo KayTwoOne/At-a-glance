@@ -213,7 +213,20 @@ plugin's `native.ts` changed - which for these two means the first install, and 
   folder. `cd` into your `Vencord` folder first (the golden rule at the top).
 - **The At a glance tab doesn't appear** -> open Settings -> Vencord and look for a
   failed patch. The tab hooks the same spot as the built-in PinDMs plugin; if a Discord
-  update moved it, the rest of the plugin still works and the tab returns once updated.
+  update moved it, the rest of the plugin (the right-click pin, watch and save actions,
+  reminders) still works and the tab returns once updated.
+- **Clicking the tab shows "At a glance could not open - Discord's layout has changed"**
+  -> the patch that places the dashboard in Discord's own layout no longer matches
+  after a Discord update. Look for a failed patch the same way; the dashboard returns
+  once the plugin is updated.
+- **Discord's own user panel (your avatar and the mute and deafen buttons) stays visible
+  at the bottom left while the dashboard is open** -> the small patch that marks that
+  panel so it can be hidden no longer matches. Nothing else is affected, and it is fixed
+  by the same update.
+- **"Your dashboard couldn't be loaded"** -> At a glance couldn't read your saved data.
+  Nothing has been changed or lost, and it keeps retrying by itself (after 2 seconds,
+  then 10, then 30, then every 30 seconds). **Try again** retries straight away. Until
+  your data has loaded, changes are refused rather than saved over it.
 - **Weather card can't load** -> you skipped the extra full restart after the first
   build. Quit from the tray and reopen.
 - **Discord looks totally normal (stock) after `pnpm inject`** -> Discord wasn't fully

@@ -18,6 +18,7 @@ import {
     useStateFromStores
 } from "@webpack/common";
 
+import { finders } from "../../discordChecks";
 import { guildAcronym } from "../../util";
 import { closeGlance } from "../GlanceLayer";
 import { useNow } from "../hooks";
@@ -26,7 +27,7 @@ import { WidgetCard } from "../WidgetCard";
 
 const logger = new Logger("AtAGlance");
 
-const VoiceActions = findByPropsLazy("selectVoiceChannel", "selectChannel") as {
+const VoiceActions = findByPropsLazy(...finders.voiceActions.props) as {
     selectVoiceChannel(channelId: string): void;
 };
 

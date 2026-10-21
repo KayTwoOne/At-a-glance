@@ -6,53 +6,83 @@
 
 import { React } from "@webpack/common";
 
+import { deriveAccentTokens, pickTextTone } from "../accent";
+import { mixHex, parseCssColour, relativeLuminance } from "../colour";
 import { useGlanceConfig } from "../data";
 
-/**
- * True when Discord's base theme is light - measured, not guessed: a probe
- * element resolves `--text-default` to actual rgb (the text colour always flips
- * with the base theme, Nitro gradient themes included), and dark text means a
- * light theme behind it. Re-measures when Discord swaps theme classes on <html>.
- */
-export function useOnLightTheme(): boolean {
-    const [light, setLight] = React.useState(false);
-
-    React.useEffect(() => {
-        const probe = document.createElement("span");
-        probe.style.color = "var(--text-default, var(--text-normal, #fff))";
-        probe.style.display = "none";
-        document.body.appendChild(probe);
-
-        const measure = () => {
-            try {
-                const rgb = getComputedStyle(probe).color.match(/\d+/g);
-                if (!rgb) return;
-                const [r, g, b] = rgb.map(Number);
-                setLight(0.2126 * r + 0.7152 * g + 0.0722 * b < 128);
-            } catch { }
-        };
-        measure();
-
-        const observer = new MutationObserver(measure);
-        observer.observe(document.documentElement, { attributes: true, attributeFilter: ["class"] });
-        return () => {
-            observer.disconnect();
-            probe.remove();
-        };
-    }, []);
-
-    return light;
+interface DiscordTheme {
+    /** Discord's base theme is light (measured from --text-default) */
+    light: boolean;
+    /** The surface cards sit on in "theme" mode, as opaque #rrggbb */
+    surface: string;
 }
 
-/** Relative luminance (0–1) of a #rrggbb colour, for contrast decisions */
-function luminance(hex: string): number {
-    const m = /^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(hex);
-    if (!m) return 0;
-    const chan = (h: string) => {
-        const v = parseInt(h, 16) / 255;
-        return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4;
+// One measurement shared by every hook instance: one pair of probes, one
+// attribute observer, created for the first subscriber and removed after
+// the last.
+let themeState: DiscordTheme = { light: false, surface: "#26262b" };
+const themeListeners = new Set<() => void>();
+let stopThemeWatch: (() => void) | null = null;
+
+/**
+ * Discord's theme, measured rather than guessed: hidden probes resolve
+ * --text-default (it always flips with the base theme, Nitro gradients
+ * included) and --background-base-low (the colour cards sit on). A
+ * translucent surface is composited over black or white to match the theme.
+ * Re-measures when Discord swaps theme classes on <html>.
+ */
+function startThemeWatch() {
+    const text = document.createElement("span");
+    text.style.color = "var(--text-default, var(--text-normal, #fff))";
+    text.style.display = "none";
+    const surface = document.createElement("span");
+    surface.style.backgroundColor = "var(--background-base-low, var(--background-primary, #26262b))";
+    surface.style.display = "none";
+    document.body.append(text, surface);
+
+    const measure = () => {
+        try {
+            const ink = parseCssColour(getComputedStyle(text).color);
+            const light = ink ? relativeLuminance(ink.hex) < 0.5 : false;
+            const base = parseCssColour(getComputedStyle(surface).backgroundColor);
+            const opaque = base
+                ? (base.alpha >= 1 ? base.hex : mixHex(light ? "#ffffff" : "#000000", base.hex, base.alpha))
+                : (light ? "#ffffff" : "#26262b");
+            if (themeState.light === light && themeState.surface === opaque) return;
+            themeState = { light, surface: opaque };
+            for (const listener of [...themeListeners]) listener();
+        } catch { }
     };
-    return 0.2126 * chan(m[1]) + 0.7152 * chan(m[2]) + 0.0722 * chan(m[3]);
+
+    const observer = new MutationObserver(measure);
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ["class"] });
+    stopThemeWatch = () => {
+        observer.disconnect();
+        text.remove();
+        surface.remove();
+    };
+    measure();
+}
+
+function useDiscordTheme(): DiscordTheme {
+    const [, forceUpdate] = React.useReducer(x => x + 1, 0);
+    React.useEffect(() => {
+        themeListeners.add(forceUpdate);
+        if (!stopThemeWatch) startThemeWatch();
+        return () => {
+            themeListeners.delete(forceUpdate);
+            if (themeListeners.size === 0) {
+                stopThemeWatch?.();
+                stopThemeWatch = null;
+            }
+        };
+    }, []);
+    return themeState;
+}
+
+/** True when Discord's base theme is light. */
+export function useOnLightTheme(): boolean {
+    return useDiscordTheme().light;
 }
 
 /**
@@ -67,18 +97,50 @@ function luminance(hex: string): number {
  * add a `vc-glance-bg-override` class so cards become opaque too (otherwise the
  * theme would still bleed through them). When an override background is light,
  * `vc-glance-bg-light` flips text/icon colours to dark for legibility.
+ *
+ * Accent is the one highlight colour. Its contrast-checked forms (fills and
+ * their labels, links, the greeting name) are set inline as --vcg-accent-ui,
+ * --vcg-on-accent, --vcg-accent-text and --vcg-name-from/-to, measured against
+ * the surfaces the cards actually paint.
  */
-export function useAppearance(): { materialClass: string; style: React.CSSProperties; } {
+export function useAppearance(): { materialClass: string; style: React.CSSProperties; onLightTheme: boolean; } {
     const { appearance } = useGlanceConfig();
     const override = appearance.backgroundMode !== "theme";
 
-    // Decide light vs dark content from the effective background luminance
-    const bgLum = appearance.backgroundMode === "solid"
-        ? luminance(appearance.backgroundColor)
+    const theme = useDiscordTheme();
+    // Where page-level text (the top bar) sits: the override background's stops
+    const stops = appearance.backgroundMode === "solid"
+        ? [appearance.backgroundColor]
         : appearance.backgroundMode === "gradient"
-            ? (luminance(appearance.primary) + luminance(appearance.accent)) / 2
-            : 0;
-    const light = override && bgLum > 0.55;
+            ? [appearance.primary, appearance.accent]
+            : [theme.surface];
+    const light = override && pickTextTone(stops) === "dark";
+
+    // Where cards sit, as styles.css paints them. In both override modes the
+    // card base is --vcg-card mixed into --vcg-bg (the solid colour setting,
+    // even in gradient mode) at the surface opacity; in theme mode it is
+    // Discord's surface. The tint layer then lays primary over one end and
+    // accent over the other, at the same strengths useAppearance sets below,
+    // so both tinted ends are surfaces. Keep this in step with styles.css
+    // (.vc-glance-bg-solid / -gradient / -light --vcg-card, and the override
+    // card rule).
+    const card = light
+        ? mixHex("#f2f3f5", "#000000", 0.06)
+        : appearance.backgroundMode === "solid"
+            ? mixHex(appearance.backgroundColor, "#ffffff", 0.06)
+            : "#202127";
+    const base = override
+        ? mixHex(appearance.backgroundColor, card, appearance.surfaceOpacity / 100)
+        : theme.surface;
+    const tint = appearance.intensity * 0.45 / 100;
+    const tintSoft = appearance.intensity * 0.28 / 100;
+    const surfaces = [mixHex(base, appearance.primary, tint), mixHex(base, appearance.accent, tintSoft)];
+    const tokens = deriveAccentTokens({
+        accent: appearance.accent,
+        primary: appearance.primary,
+        nameColor: appearance.nameColor,
+        surfaces
+    });
 
     const classes = [
         `vc-glance-material-${appearance.material}`,
@@ -95,9 +157,14 @@ export function useAppearance(): { materialClass: string; style: React.CSSProper
         "--vcg-tint-soft": `${(appearance.intensity * 0.28).toFixed(1)}%`,
         "--vcg-angle": `${appearance.angle}deg`,
         "--vcg-bg": appearance.backgroundColor,
-        "--vcg-surface-opacity": `${appearance.surfaceOpacity}%`
+        "--vcg-surface-opacity": `${appearance.surfaceOpacity}%`,
+        "--vcg-accent-ui": tokens.accentUi,
+        "--vcg-on-accent": tokens.onAccent,
+        "--vcg-accent-text": tokens.accentText,
+        "--vcg-name-from": tokens.nameFrom,
+        "--vcg-name-to": tokens.nameTo
     } as React.CSSProperties;
     if (appearance.nameColor) (style as any)["--vcg-name"] = appearance.nameColor;
 
-    return { materialClass: ` ${classes}`, style };
+    return { materialClass: ` ${classes}`, style, onLightTheme: theme.light };
 }

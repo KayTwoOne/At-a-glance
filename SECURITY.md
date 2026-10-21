@@ -4,6 +4,13 @@ Re-audited at **v2.6.3 (2026-07-15)**; first audited at v0.8.0. Scope: the whole
 plugin (`src/userplugins/atAGlance/`), line by line, covering security, privacy,
 performance/memory, and Discord ToS risk.
 
+**Updated for v3.1.0 (2026-10-20), not re-audited.** 3.1.0 replaced the overlay
+with a dashboard rendered inside Discord's own layout, and rebuilt how config is
+loaded and saved. The sections below on patches, listeners, timers, the
+dashboard's root and stored data were rewritten to match that code, and the
+listener count was taken again. Everything else, and the findings in the summary,
+is as audited at v2.6.3.
+
 ## Summary
 
 **No critical, high, or medium findings.** The plugin cannot leak your Discord
@@ -69,24 +76,40 @@ each fire once after the plugin was disabled). Both are now cleared in `stop()`.
 - Loaded config is treated as untrusted and rebuilt field-by-field through an
   allowlist sanitizer (unknown keys dropped, lists deduped and hard-capped).
   No untrusted object is ever spread or merged → no prototype-pollution vector.
-- Config is keyed per-account and mutations never persist until that account's
-  config has loaded.
+- Config is keyed per-account. Nothing is written until that account's saved
+  data has loaded, and only ever to that account: a failed or overlapping load
+  can't replace what is stored, a failed read is shown as one (and retried after
+  2 s, 10 s and 30 s, then every 30 s) instead of falling back to an empty
+  config, and switching accounts saves the old account's pending edit to the old
+  account first.
 
 ## Performance & memory - no leaks
 
 - **Listeners balanced.** Every `addEventListener` has a matching
-  `removeEventListener` (17/17). Window-level listeners are added either in the
-  plugin's `start()` (removed in `stop()`) or in a React effect (removed in its
-  cleanup); the overlay's four window listeners (keydown, resize, capture-phase
-  click, Flux `CHANNEL_SELECT`) are all torn down when the overlay unmounts.
+  `removeEventListener` (19/19 call sites at 3.1.0). Window-level listeners are
+  added either in the plugin's `start()` (removed in `stop()`) or in a React
+  effect (removed in its cleanup). The dashboard layer's own are two `keydown`
+  listeners and a capture-phase `click` listener, plus a Flux `CHANNEL_SELECT`
+  subscription, all torn down when it unmounts. The layer has no window
+  `resize` listener and no page watcher any more: Discord's layout sizes it.
 - **Timers cleared.** Every `setInterval` lives in an effect with
   `clearInterval` cleanup, except the reminder ticker, which is a guarded
-  singleton (`if (intervalId) return`) cleared in `stop()`. As of this audit the
-  Quick Tools countdown timeout and the scheduler's startup timeout are also
-  cleared on `stop()`, so nothing survives a disable.
-- **One `MutationObserver`** (light-theme probe) - `disconnect()`ed on cleanup.
-- **Overlay root** is mounted with `createRoot` and `unmount()`ed on close; the
-  container element is removed. Disabling the plugin closes an open overlay.
+  singleton (`if (intervalId) return`) cleared in `stop()`. As of the v2.6.3 audit
+  the Quick Tools countdown timeout and the scheduler's startup timeout are also
+  cleared on `stop()`, and since 3.1.0 so are a pending config load retry (any
+  unsaved edit is written at the same moment) and the 20 second fallback timer
+  of an open-on-startup that is still waiting for Discord's layout, so nothing
+  survives a disable.
+- **One `MutationObserver`**, on the `class` attribute of `<html>`, so the
+  dashboard can re-measure Discord's theme and the surface its cards sit on. It
+  is shared by everything that needs the measurement: created for the first,
+  and `disconnect()`ed after the last, along with the two hidden probe elements.
+- **No separate React root.** The dashboard is rendered by an `AppView` patch
+  inside Discord's own React tree, as one cell of its app grid, so there is no
+  `createRoot` to mount or unmount and no container element to remove. Closing
+  it makes the host render nothing, which unmounts the dashboard and runs the
+  listener cleanup above. Disabling the plugin closes an open dashboard and
+  clears the `data-vc-glance-open` attribute that hides Discord's user panel.
 - **Webpack lookups are all `*Lazy`** - resolved once on first access and cached
   by Vencord's proxy, never searched on a loop.
 - **Hot paths.** Clocks/stopwatch/forecast tick on local timers only (re-renders,
@@ -114,18 +137,35 @@ each fire once after the plugin was disabled). Both are now cleared in `stop()`.
 
 ## Failure containment
 
-- The sidebar tab, every widget, the popup message/composer, and the rail strip
-  are wrapped in `ErrorBoundary`s (the injected tab with `{ noop: true }`, so a
-  broken patch renders nothing rather than crashing Discord's sidebar). The
+- The sidebar tab, the dashboard host, every widget, the popup message/composer,
+  and the rail strip are wrapped in `ErrorBoundary`s (the injected tab and host
+  with `{ noop: true }`, so a throw there renders nothing rather than crashing
+  Discord's sidebar or its content area). The
   native message renderer and native chat input each fall back to a plain
   implementation if Discord internals change, so a Discord update degrades to
   reduced features rather than a broken client.
-- **Patch fragility is bounded.** The plugin adds exactly one webpack patch
-  (`find: '.FRIENDS},"friends"'`, the DM-sidebar anchor shared with upstream
-  PinDMs). If a Discord update moves it, Vencord reports a failed patch and the
-  tab simply doesn't appear - the rest of the plugin (context-menu actions,
-  scheduler) keeps working. The handful of code-string / CSS-class lookups all
-  sit inside `ErrorBoundary`-wrapped widgets or the popup's fallback path.
+- **Patch fragility is bounded.** The plugin adds exactly three webpack
+  patches, each its own entry in `discordChecks.ts` and each a single insertion
+  rather than a rewrite:
+  - `find: '.FRIENDS},"friends"'`, the DM-sidebar anchor shared with upstream
+    PinDMs, adds the tab.
+  - `find: '"AppView"'` renders the dashboard host as one more child of
+    Discord's content grid.
+  - `find: '"--custom-app-panels-height"'` adds the `data-vc-glance-panels`
+    marker to Discord's user panel, which the stylesheet uses to hide it while
+    the dashboard is open.
+
+  If a Discord update moves one, Vencord reports that patch as failed and only
+  its own part goes. Without the first, the tab doesn't appear. Without the
+  second, opening the dashboard shows a toast saying Discord's layout has
+  changed instead of leaving a blank page. Without the third, Discord's own user
+  panel stays visible. The rest of the plugin (context-menu actions, scheduler)
+  keeps working in every case.
+- **One list of what's asked of Discord.** The patches, every lookup, and the
+  grid line names the stylesheet places the host on are all in `discordChecks.ts`,
+  which is checked against Discord's current client code before each release.
+  The code-string / CSS-class lookups all sit inside `ErrorBoundary`-wrapped
+  widgets or the popup's fallback path.
 - Verified with `tools/verify-bundle.js`: the bundle evaluates without touching
   any lazy proxy at module scope, so a missing module can never throw during load
   and take down all of Vencord.

@@ -26,18 +26,20 @@ import {
     PermissionStore,
     React,
     RestAPI,
-    showToast,
-    Toasts,
     UserStore,
     useStateFromStores
 } from "@webpack/common";
+
+import { finders } from "../discordChecks";
+import { glanceToast } from "./toast";
 
 const logger = new Logger("AtAGlance");
 
 // Native message renderer - same component MessageLinkEmbeds uses. Gives real
 // markdown, embeds, attachments, reactions and edited tags for free.
-const ChannelMessage = findComponentByCodeLazy("childrenExecutedCommand:", ".hideAccessories");
-const SearchResultClasses = findCssClassesLazy("message", "searchResult");
+const ChannelMessage = findComponentByCodeLazy(...finders.channelMessage.strings);
+const SearchResultClasses = findCssClassesLazy(...finders.searchResultClasses.names);
+// Listed in discordChecks.ts as unchecked: a settings path, not code text.
 const MessageDisplayCompact = getUserSettingLazy("textAndImages", "messageDisplayCompact")!;
 
 // Discord's own clipboard helper (works in the desktop sandbox where the raw
@@ -46,7 +48,7 @@ const MessageDisplayCompact = getUserSettingLazy("textAndImages", "messageDispla
 // Discord's message action creators - editMessage saves an edit server-side;
 // getSendMessageOptionsForReply turns a pending reply into the send options
 // (message_reference + allowed_mentions) so our own send attaches the reply.
-export const MsgActions = findByPropsLazy("editMessage", "sendMessage") as {
+export const MsgActions = findByPropsLazy(...finders.messageActions.props) as {
     editMessage(channelId: string, messageId: string, edit: { content: string; }): Promise<unknown>;
     getSendMessageOptionsForReply?(reply: any): any;
 };
@@ -90,10 +92,10 @@ function copyText(text: string) {
 /* ========== reactions ==========
  * There's no confirmed, stable action-creator for reactions anywhere in this
  * codebase (or Vencord's shared webpack/common mappings) to match against, so
- * rather than guess a findByPropsLazy("addReaction") module's exact argument
- * shape, this follows the technique two other plugins in this tree already
- * ship with (equicordplugins/husk, equicordplugins/scheduledMessages): a
- * plain REST call to the same endpoint the client itself hits. Toggling is a
+ * rather than guess at a props lookup for an "addReaction" module's exact
+ * argument shape, this follows the technique two other plugins in this tree
+ * already ship with (equicordplugins/husk, equicordplugins/scheduledMessages):
+ * a plain REST call to the same endpoint the client itself hits. Toggling is a
  * PUT/DELETE against .../reactions/<emoji>/@me either way; the only question
  * is which verb, decided by whether the message already carries your own
  * reaction with that emoji. */
@@ -198,7 +200,7 @@ async function reactToMessage(channel: any, message: any, emoji: { id?: string; 
         }
     } catch (e) {
         logger.error("Failed to react to message", e);
-        showToast("Couldn't add that reaction.", Toasts.Type.FAILURE);
+        glanceToast("Couldn't add that reaction.", "failure");
     }
 }
 

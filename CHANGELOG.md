@@ -1,5 +1,99 @@
 # Changelog
 
+## 3.1.0 - 2026-10-20
+
+The dashboard now sits inside Discord's own layout instead of on top of it,
+saving can no longer overwrite your data, and every control follows your Accent
+colour.
+
+### Safer saving
+- **A failed or overlapping load can no longer overwrite what you saved.**
+  Nothing is written until this account's data has loaded, and it is only ever
+  written back to that account.
+- **A failed read now says so.** Instead of an empty dashboard that looks like
+  lost data, you get "Your dashboard couldn't be loaded" with a **Try again**
+  button. It also retries on its own after 2 seconds, then 10, then 30, and
+  every 30 seconds after that for as long as it keeps failing.
+- Switching accounts saves the old account's pending edit to that account
+  first, and a reconnect no longer re-reads over edits you have just made.
+- Changes made before your data has loaded are refused, with one toast, rather
+  than being lost when the data arrives.
+- Disabling the plugin stops the retries and saves any pending edit.
+
+### Inside Discord's own layout
+- **The dashboard is now a cell of Discord's own grid, not an overlay on top
+  of it.** Discord's layout places it: right of the server rail, under the
+  title bar, beside the theme editor.
+- **Discord's theme editor narrows it automatically**, and Discord's notice bar
+  (reconnecting, updates) stays visible above it. Nothing watches the page for
+  either any more.
+- The always-on page watcher and all the measuring code are gone, so it uses
+  less CPU while it's open.
+- The **theme editor debug** setting is removed, because there is nothing left
+  to debug.
+- Discord's user panel is hidden by a marker the plugin puts on it, instead of
+  by a guessed class name.
+
+### One accent
+- **Buttons, progress bars, selected tabs, toggles, badges, links, dropdown
+  highlights and field outlines all follow your Accent colour.** Before, buttons
+  were stuck on Discord's blurple whatever you picked.
+- **Every accent colour is contrast-checked** and adjusted until it passes
+  WCAG (3:1 for controls, 4.5:1 for text) wherever that is possible. Where no
+  colour can pass, the closest one to passing is used. Labels on accent buttons
+  pick white or near-black, whichever reads.
+- A fresh install's buttons are cyan (the default Accent) with dark text,
+  because white on that cyan is only 2.6:1.
+
+### Readable on light backgrounds
+- Dark or light text is now chosen by measured contrast against every end of a
+  gradient, not by an average-brightness cut-off that could leave light text on
+  a pale end.
+
+### One continuous stage
+- The colour tint is now one wash across the whole page, and each card shows its
+  own slice of it, instead of the gradient restarting in every card. Cards still
+  lift on hover without breaking that.
+
+### Discord's own bookmarks and reminders
+- **Saved Messages and Reminders now read Discord's own lists.** Whatever you
+  bookmark, or set a reminder on, in Discord shows up here, tidied, and follows
+  you across your devices. Discord hands bookmarks over 25 at a time, so **Load
+  25 more** asks for the next page when you want it.
+- **Reminders puts Discord's message reminders beside your own notes,** earliest
+  first, so anything overdue is on top. Each one says when it is due (OVERDUE 25
+  MIN, IN 2 H, TOMORROW 09:00) and has **Done** and **Snooze**, with the same
+  timer choices as the add form. Once you have both kinds, a small **All /
+  Messages / Notes** switch appears above the list, and it starts at All each
+  time you open the dashboard.
+- **Overdue Discord reminders count on the card and on the tab's badge,** next
+  to your own. Discord already notifies you when one is due, so At a glance does
+  not send a second notification for them.
+- **"Save to At a glance" is gone from the message menu.** Discord's **Bookmark
+  Message** and **Create Reminder** do the same job, and sync. If Discord's
+  lists can't be found after an update, the old menu item and the old lists come
+  back, so nothing is lost.
+- **Your old saves stay until you move them.** They sit under "Saved here
+  before", and **Move to Discord** bookmarks them in Discord one at a time, three
+  seconds apart, taking each local copy away only once Discord has it.
+- **Your text reminders stay.** Discord can't hold a reminder without a
+  message, so notes like "Water the plants" remain At a glance's own, marked
+  "Your note · At a glance only".
+
+### Fixed
+- **Toasts work on current Equicord again.** Its toast API changed. They still
+  work on Vencord.
+
+### Smaller things
+- **Click anywhere on a widget's title bar** to collapse or expand it, not just
+  on its name.
+
+### Behind the scenes
+- Every Discord lookup At a glance makes now comes from one list, which is
+  checked against Discord's live code before each release.
+- One lookup, the chat message renderer, was matching two of Discord's modules.
+  It is pinned to the right one now.
+
 ## 3.0.0 - 2026-08-21
 
 The dashboard's layout goes from a fixed two-column split to a free one where any
@@ -444,7 +538,7 @@ Release polish. No behaviour changes.
 - **Message grouping**: verified in Discord's own message chunk that the
   standalone message component renders its header **unconditionally** (the
   `groupId` prop is ignored), and that the header is a design-system Heading
-  whose h1–h6 level comes from React context - which is why hiding `h3` (or a
+  whose h1-h6 level comes from React context - which is why hiding `h3` (or a
   mangled `header_` class) did nothing. Continuation rows now hide the header at
   **any heading level**; bursts finally pack like the native client.
 - **`:emoji` suggestions are now our own popup.** Discord's built-in
@@ -938,7 +1032,7 @@ feel like a genuine home screen.
   clear everywhere) and empties the list.
 
 ### Nameplate user panel (bottom-left)
-- The rail user strip is now **resizable**: drag its right edge (64–400px,
+- The rail user strip is now **resizable**: drag its right edge (64-400px,
   double-click to reset). Past ~110px it flips from the compact vertical stack
   into a full user panel.
 - In panel mode, your **Nitro nameplate** collectible renders behind your
@@ -1020,7 +1114,7 @@ into `src/userplugins/` of a Vencord source checkout and build (`pnpm build`).
 - Widgets: collapsible, hideable (Add Widget menu), drag-to-rearrange with dashed
   drop-slot ghost (Esc cancels; reduced-motion respected).
 - Customization modal: Classic/Acrylic/Glass materials, primary + accent colours,
-  intensity slider (capped rendering so 100% stays tasteful), 0–360° shine direction.
+  intensity slider (capped rendering so 100% stays tasteful), 0-360° shine direction.
 - Quick-pin hotkey, default Ctrl+Middle-click (suppresses Discord's default middle-click
   behaviour); keyboard combos supported.
 

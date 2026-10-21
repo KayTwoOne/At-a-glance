@@ -15,15 +15,16 @@ import {
 } from "@webpack/common";
 
 import { getConfig } from "../data";
+import { finders } from "../discordChecks";
 import { openChannelPopup } from "./ChannelPopup";
 import { openCustomizePanel } from "./CustomizePanel";
 import { closeGlance } from "./GlanceLayer";
 import { BookmarkIcon, ChatIcon, HashIcon, PaletteIcon, SpeakerIcon } from "./icons";
 
-const VoiceActions = findByPropsLazy("selectVoiceChannel", "selectChannel") as {
+const VoiceActions = findByPropsLazy(...finders.voiceActions.props) as {
     selectVoiceChannel(channelId: string): void;
 };
-const MessageJumpActions = findByPropsLazy("fetchMessages", "jumpToMessage") as {
+const MessageJumpActions = findByPropsLazy(...finders.messageJumpActions.props) as {
     jumpToMessage(options: { channelId: string; messageId: string; flash?: boolean; }): void;
 };
 

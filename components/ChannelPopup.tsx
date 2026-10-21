@@ -26,7 +26,8 @@ import {
     useStateFromStores
 } from "@webpack/common";
 
-import { useAppearance, useOnLightTheme } from "./appearance";
+import { finders } from "../discordChecks";
+import { useAppearance } from "./appearance";
 import { closeGlance } from "./GlanceLayer";
 import { ExternalIcon, SendIcon } from "./icons";
 import { MsgActions, NativeMessageList, PlainMessageList, ReplyBar } from "./PopupMessages";
@@ -40,7 +41,8 @@ const logger = new Logger("AtAGlance");
 // in its own modals (profile replies, voice channel status), rendered here in
 // controlled mode with the fully-featured SIDEBAR config: emoji, GIF and
 // sticker pickers, mention/emoji autocomplete - all wired to the channel.
-const ChannelTextArea = findComponentByCodeLazy("renderApplicationCommandIcon:", '"submit-failure"');
+const ChannelTextArea = findComponentByCodeLazy(...finders.channelTextArea.strings);
+// Listed in discordChecks.ts as unchecked: it matches by shape, not text.
 const ChatInputTypes = findLazy(m => m?.SIDEBAR?.analyticsName === "sidebar" && m.NORMAL) as Record<string, any>;
 
 /** Slate rich value for plain text - trivial structure, built locally */
@@ -53,14 +55,14 @@ function toRichValue(text: string) {
 const MAX_MESSAGE_LENGTH = 2000;
 
 /* ===== Popup open-state =====
- * The popup is rendered INSIDE our own At a glance layer (see GlanceLayer),
- * NOT through Discord's modal system. That layer has no CSS transform, so a
- * plain flex-centred backdrop lands the popup dead-centre of the viewport
- * (Discord's modal layer is transform-wrapped, which is what kept trapping
- * position:fixed and flinging the popup to one side). It also means no Discord
- * modal is open, so the emoji/GIF/sticker pickers stop fighting a modal's
- * outside-click guard. A tiny module-level store drives it, since it's opened
- * imperatively from widgets and the command palette. */
+ * The popup is rendered by our own host (GlanceTab portals it to
+ * document.body), NOT through Discord's modal system. The body has no CSS
+ * transform, so a plain flex-centred backdrop lands the popup dead-centre of
+ * the viewport (Discord's modal layer is transform-wrapped, which is what kept
+ * trapping position:fixed and flinging the popup to one side). It also means
+ * no Discord modal is open, so the emoji/GIF/sticker pickers stop fighting a
+ * modal's outside-click guard. A tiny module-level store drives it, since it's
+ * opened imperatively from widgets and the command palette. */
 let currentPopupChannelId: string | null = null;
 const popupListeners = new Set<() => void>();
 
@@ -547,9 +549,9 @@ function channelLabel(channel: any): string {
 }
 
 /**
- * The channel popup - a fixed-width card centred on the viewport, rendered
- * inside our own (transform-free) At a glance layer via a flex-centred backdrop.
- * Click the backdrop or press Escape to close.
+ * The channel popup - a fixed-width card centred on the viewport, in a
+ * flex-centred fixed backdrop that GlanceTab portals to document.body, clear
+ * of any transformed ancestor. Click the backdrop or press Escape to close.
  */
 export function ChannelPopupOverlay({ channelId, onClose }: { channelId: string; onClose: () => void; }) {
     const channel = useStateFromStores([ChannelStore], () => ChannelStore.getChannel(channelId), [channelId]);
@@ -750,8 +752,7 @@ export function ChannelPopupOverlay({ channelId, onClose }: { channelId: string;
     // .vc-glance-layer), so the user's --vcg-* theme colours are applied here
     // directly for the input-bar tint to resolve - and the light-theme class
     // must be carried here too.
-    const { style: appearanceStyle } = useAppearance();
-    const onLightTheme = useOnLightTheme();
+    const { style: appearanceStyle, onLightTheme } = useAppearance();
 
     // Memoise the composer ELEMENT so incoming messages (which re-render the
     // popup constantly) don't re-render/reset the live chat input mid-type - the
@@ -846,7 +847,7 @@ export function ChannelPopupOverlay({ channelId, onClose }: { channelId: string;
     );
 }
 
-/** Host: renders the popup inside the layer when a channel is open.
+/** Host: renders the popup when a channel is open (GlanceTab portals it to the body).
  *  Keyed by channel so per-channel state (unread marker, editor) resets cleanly. */
 export function ChannelPopupHost() {
     const channelId = useChannelPopupChannelId();

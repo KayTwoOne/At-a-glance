@@ -41,7 +41,7 @@
 
     /* Interactive + status */
     --vcg-t-focus: var(--focus-primary, #00a8fc);
-    --vcg-t-action-primary: var(--brand-500, #5865f2);
+    --vcg-t-action-primary: var(--vcg-accent-ui, var(--brand-500, #5865f2));
     --vcg-t-success: var(--status-positive, #23a55a);
     --vcg-t-warning: var(--status-warning, #f0b232);
     --vcg-t-danger: var(--status-danger, #f23f43);
@@ -115,26 +115,22 @@
     text-overflow: ellipsis;
 }
 
-/* ========== Overlay: respects the server rail and the OS titlebar ========== */
+/* ========== Host: a cell of Discord's own app grid ========== */
 
-.vc-glance-overlay {
-    position: fixed;
-    top: var(--custom-app-top-bar-height, 0px);
-    right: 0;
-    bottom: 0;
-    left: var(--custom-guild-list-width, 72px);
-    /* Above Discord's sidebar resize handle (z-index 101) so it can't be
-       grabbed through the page; still below Discord's popouts/modals/titlebar */
+/* Rendered by the AppView patch as a child of Discord's content subgrid, so
+   these line names are Discord's own (discordChecks.ts checks they exist).
+   Discord's layout does all the placing: the guild rail stays to the left,
+   the title bar and any notice bar stay above, and the theme editor, which
+   docks outside this grid, narrows it. */
+.vc-glance-host {
+    grid-column: guildsEnd / end;
+    grid-row: noticeEnd / end;
+    position: relative;
+    /* Above the sidebar resize handle (101) and the user panel (10) */
     z-index: 150;
     display: flex;
-
-    /* Set inline (GlanceLayer's watchThemeEditor) when Discord's own theme
-       editor is docked alongside us, so the workspace reflows beside it
-       instead of sitting underneath it. Eased rather than snapped so the
-       panel opening/closing doesn't read as a layout jump. --vcg-t-duration-normal
-       isn't in scope here (it's declared on .vc-glance-layer, a CHILD of this
-       element, not an ancestor) so the fallback is the real value, not decoration. */
-    transition: right var(--transition-duration-normal, 0.2s) ease;
+    min-width: 0;
+    min-height: 0;
 }
 
 .vc-glance-layer {
@@ -152,7 +148,7 @@
 }
 
 /* The rail this sits next to hides Discord's own bottom-left user panel
-   under RailUserStrip (see visibility:hidden on [class^="panels_"] further
+   under RailUserStrip (see visibility:hidden on [data-vc-glance-panels] further
    down) - that panel's own chrome doesn't go away, only its paint does, so
    whatever the rail draws behind it keeps showing through and it runs
    lighter than the plain icon rail above it. A flat border can't track that
@@ -172,12 +168,6 @@
         transparent 55%,
         color-mix(in srgb, var(--vcg-t-hover) 65%, var(--vcg-t-border)) 100%);
     pointer-events: none;
-}
-
-/* Blanks the native toolbar's channel contents while open (bar itself stays
-   for styling + window dragging; window buttons live in a separate strip) */
-[data-vc-glance-chrome] > * {
-    visibility: hidden !important;
 }
 
 .vc-glance-frame {
@@ -276,9 +266,11 @@
    this container, so it already knows the real available width; a viewport
    media query would be a second, less accurate opinion fighting the first. */
 
-/* Widgets fade+rise in with a gentle stagger when the view opens */
+/* Widgets fade+rise in with a gentle stagger when the view opens. Relative,
+   because the rise animates `top` (see the keyframes). */
 .vc-glance-widget-slot {
-    animation: vc-glance-widget-in 0.4s cubic-bezier(0.22, 1, 0.36, 1) both;
+    position: relative;
+    animation: vc-glance-widget-in 0.4s cubic-bezier(0.22, 1, 0.36, 1) backwards;
 }
 
 /* A hidden or "hide when empty" widget renders null, leaving a genuinely
@@ -297,15 +289,22 @@
 .vc-glance-column-1 .vc-glance-widget-slot:nth-child(4) { animation-delay: 0.14s; }
 .vc-glance-column-1 .vc-glance-widget-slot:nth-child(5) { animation-delay: 0.18s; }
 
+/* The rise moves `top`, not `transform`. While a transform is applied,
+   Chromium treats an inside element's background-attachment: fixed as scroll,
+   so each card's tint would be drawn as its own per-card gradient and then jump
+   to the window-wide slice the moment its animation ended, staggered across the
+   page. `top` offsets the box without that side effect, so the tint is the same
+   slice from the first frame. Fill-mode `backwards` holds the `from` state
+   through each card's stagger delay; nothing is held after the end. */
 @keyframes vc-glance-widget-in {
     from {
         opacity: 0;
-        transform: translateY(10px);
+        top: 10px;
     }
 
     to {
         opacity: 1;
-        transform: translateY(0);
+        top: 0;
     }
 }
 
@@ -329,7 +328,7 @@ body.vc-glance-dragging .vc-glance-widget-slot {
     border: 1px solid var(--vcg-t-border);
     background: var(--background-mod-subtle, rgb(255 255 255 / 3%));
     overflow: hidden;
-    animation: vc-glance-widget-in 0.5s cubic-bezier(0.22, 1, 0.36, 1) both;
+    animation: vc-glance-widget-in 0.5s cubic-bezier(0.22, 1, 0.36, 1) backwards;
 }
 
 /* Aurora: two slow drifting blobs tinted by the user's accent colours */
@@ -377,7 +376,7 @@ body.vc-glance-dragging .vc-glance-widget-slot {
 }
 
 .vc-glance-hero-name {
-    background: linear-gradient(90deg, var(--vcg-primary, #5865f2), var(--vcg-accent, #00a8fc));
+    background: linear-gradient(90deg, var(--vcg-name-from, var(--vcg-primary, #5865f2)), var(--vcg-name-to, var(--vcg-accent, #00a8fc)));
     -webkit-background-clip: text;
     background-clip: text;
     -webkit-text-fill-color: transparent;
@@ -387,8 +386,8 @@ body.vc-glance-dragging .vc-glance-widget-slot {
    from the primary/accent gradient so it can't blend into the chosen theme */
 .vc-glance-custom-name .vc-glance-hero-name {
     background: none;
-    -webkit-text-fill-color: var(--vcg-name, #fff);
-    color: var(--vcg-name, #fff);
+    -webkit-text-fill-color: var(--vcg-name-from, var(--vcg-name, #fff));
+    color: var(--vcg-name-from, var(--vcg-name, #fff));
 }
 
 .vc-glance-hero-summary {
@@ -616,7 +615,7 @@ button.vc-glance-hero-summary:hover {
 
 .vc-glance-palette-item-active {
     background: var(--vcg-t-action-primary);
-    color: #fff;
+    color: var(--vcg-on-accent, #fff);
 }
 
 .vc-glance-palette-item-icon {
@@ -734,7 +733,7 @@ button.vc-glance-hero-summary:hover {
 .vc-glance-dropdown-item-selected.vc-glance-dropdown-item-active,
 .vc-glance-dropdown-item-active.vc-glance-dropdown-item-selected {
     background: var(--vcg-t-action-primary);
-    color: #fff;
+    color: var(--vcg-on-accent, #fff);
 }
 
 /* ========== Weather forecast strip ========== */
@@ -825,15 +824,34 @@ button.vc-glance-hero-summary:hover {
     border-radius: var(--vcg-t-radius-widget);
 }
 
+/* The whole bar collapses and expands the card (handleHeaderClick in
+   WidgetCard.tsx), so it reads as one target: a pointer, no text selected by
+   repeated clicks, and a hover fill. Its top corners follow the card's; a
+   collapsed card is only a header, so that case rounds all four. */
 .vc-glance-card-header {
     display: flex;
     align-items: center;
     gap: 6px;
     padding: 12px 12px 10px 8px;
+    border-radius: var(--vcg-t-radius-widget) var(--vcg-t-radius-widget) 0 0;
+    cursor: pointer;
+    user-select: none;
+}
+
+.vc-glance-card-header:hover {
+    background: var(--vcg-t-hover);
+}
+
+/* The same quiet-while-dragging rule the card's own hover lift follows: a
+   header lighting up under the pointer mid-drag is noise, and nothing in it is
+   clickable until the drop. */
+body.vc-glance-dragging .vc-glance-card-header:hover {
+    background: transparent;
 }
 
 .vc-glance-card-collapsed .vc-glance-card-header {
     padding-bottom: 12px;
+    border-radius: var(--vcg-t-radius-widget);
 }
 
 .vc-glance-card-collapse {
@@ -966,8 +984,6 @@ body.vc-glance-dragging .vc-glance-column:empty {
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
-    cursor: pointer;
-    user-select: none;
 }
 
 .vc-glance-card-summary {
@@ -984,10 +1000,13 @@ body.vc-glance-dragging .vc-glance-column:empty {
     flex-shrink: 0;
 }
 
+/* A click in the gap between two actions does nothing (it is excluded from the
+   header's toggle), so the header's pointer cursor would promise otherwise. */
 .vc-glance-card-actions {
     display: flex;
     align-items: center;
     gap: 6px;
+    cursor: default;
 }
 
 .vc-glance-card-body {
@@ -1256,16 +1275,17 @@ body.vc-glance-dragging .vc-glance-column:empty {
 .vc-glance-icon-button-active {
     background: var(--vcg-t-action-primary);
 
-    /* Literal white rather than --vcg-t-text-primary: that token flips to
-       near-black under a light background colour, which measures about 2.9:1
-       on blurple and fails the 3:1 minimum for a control. Same reason
-       .vc-glance-calc-key-equals hard-codes it. */
-    color: #fff;
+    /* The label comes from --vcg-on-accent (white or near-black, whichever
+       reads better on the accent fill), not --vcg-t-text-primary: that token
+       flips with the background colour, not with the fill, and measured about
+       2.9:1 on blurple, under the 3:1 minimum for a control. Same reason
+       .vc-glance-calc-key-equals uses it. */
+    color: var(--vcg-on-accent, #fff);
 }
 
 .vc-glance-icon-button-active:hover:not(:disabled) {
     background: var(--vcg-t-action-primary);
-    color: #fff;
+    color: var(--vcg-on-accent, #fff);
 
     /* The fill already carries the pressed state, so hover only lifts it
        slightly - otherwise an active button feels dead under the pointer. */
@@ -1537,6 +1557,7 @@ body.vc-glance-dragging .vc-glance-column:empty {
 
 .vc-glance-button-brand {
     background: var(--vcg-t-action-primary);
+    color: var(--vcg-on-accent, #fff);
 }
 
 .vc-glance-button-danger {
@@ -1554,7 +1575,7 @@ body.vc-glance-dragging .vc-glance-column:empty {
     padding: 0;
     border: none;
     background: none;
-    color: var(--text-link, #00a8fc);
+    color: var(--vcg-accent-text, var(--text-link, #00a8fc));
     font-size: 12px;
     cursor: pointer;
 }
@@ -1625,7 +1646,7 @@ body.vc-glance-dragging .vc-glance-column:empty {
 }
 
 .vc-glance-tool-tab:focus-visible {
-    outline: 2px solid var(--brand-500, #5865f2);
+    outline: 2px solid var(--vcg-t-focus);
     outline-offset: -2px;
     border-radius: var(--vcg-t-radius-control);
 }
@@ -1800,13 +1821,13 @@ body.vc-glance-dragging .vc-glance-column:empty {
 }
 
 .vc-glance-calc-key-op {
-    color: var(--vcg-t-action-primary);
+    color: var(--vcg-accent-text, var(--vcg-t-action-primary));
 }
 
 .vc-glance-calc-key-equals {
     grid-column: span 4;
     background: var(--vcg-t-action-primary);
-    color: #fff;
+    color: var(--vcg-on-accent, #fff);
 }
 
 .vc-glance-calc-key-equals:hover {
@@ -1997,9 +2018,10 @@ body.vc-glance-dragging .vc-glance-column:empty {
 
 /* Discord's own bottom-left user panel (and the game-activity chip inside it)
    is hidden outright while At a glance is open - our strip replaces it, and
-   with the strip now TRANSPARENT nothing may linger behind it. */
-body[data-vc-glance-open] [class^="panels_"],
-body[data-vc-glance-open] [class*=" panels_"] {
+   with the strip now TRANSPARENT nothing may linger behind it. The panel is
+   found by the data-vc-glance-panels marker a patch puts on it
+   (discordChecks.ts), not by one of Discord's hashed class names. */
+body[data-vc-glance-open] [data-vc-glance-panels] {
     visibility: hidden !important;
 }
 
@@ -2007,8 +2029,11 @@ body[data-vc-glance-open] [class*=" panels_"] {
     position: fixed;
     left: 0;
     bottom: 0;
-    /* Above the sidebar resize handle (101); still well below Discord's real
-       popouts/tooltips (1000+) so those aren't covered. */
+    /* Orders the strip inside .vc-glance-host's stacking context only. What
+       Discord's sidebar resize handle (101) and user panel (10) compare
+       against is the host's own z-index (150), which is what keeps them
+       under the strip. Discord's popouts and tooltips (1000+) sit in layers
+       above the host, so they are not covered. */
     z-index: 120;
     width: var(--custom-guild-list-width, 72px);
     display: flex;
@@ -2254,8 +2279,8 @@ body[data-vc-glance-open] [class*=" panels_"] {
     padding: 5px 12px;
     border: none;
     border-radius: var(--vcg-t-radius-row) var(--vcg-t-radius-row) 0 0;
-    background: var(--vcg-accent, var(--brand-500, #5865f2));
-    color: #fff;
+    background: var(--vcg-t-action-primary);
+    color: var(--vcg-on-accent, #fff);
     font-size: 12px;
     font-weight: 600;
     text-align: left;
@@ -2750,14 +2775,14 @@ body[data-vc-glance-open] [class*=" panels_"] {
 
 .vc-glance-angle-arrow {
     display: inline-flex;
-    color: var(--vcg-accent, var(--brand-500, #5865f2));
+    color: var(--vcg-t-action-primary);
 }
 
 .vc-glance-slider {
     width: 100%;
     height: 8px;
     cursor: pointer;
-    accent-color: var(--vcg-accent, var(--brand-500, #5865f2));
+    accent-color: var(--vcg-t-action-primary);
 }
 
 .vc-glance-slider:focus-visible {
@@ -2787,7 +2812,7 @@ body[data-vc-glance-open] [class*=" panels_"] {
    name/timestamp header; continuations hide them (the standalone message
    component renders the header unconditionally - its groupId prop is ignored,
    verified in Discord's message chunk). The header is a design-system Heading
-   whose h1–h6 level comes from React context, so it must be matched at ANY
+   whose h1-h6 level comes from React context, so it must be matched at ANY
    level - that's why targeting h3 (or a mangled header_ class) silently
    failed. Content already sits in the avatar gutter, so it stays aligned. */
 .vc-glance-msg-start {
@@ -2892,7 +2917,7 @@ body[data-vc-glance-open] [class*=" panels_"] {
     padding: 8px 10px;
     border-radius: var(--vcg-t-radius-row);
     background: var(--background-mod-subtle, rgb(255 255 255 / 5%));
-    border-left: 3px solid var(--vcg-accent, var(--brand-500, #5865f2));
+    border-left: 3px solid var(--vcg-t-action-primary);
 }
 
 .vc-glance-msg-edit-badge {
@@ -2900,7 +2925,7 @@ body[data-vc-glance-open] [class*=" panels_"] {
     font-weight: 700;
     letter-spacing: 0.02em;
     text-transform: uppercase;
-    color: var(--vcg-accent, var(--brand-500, #949ba4));
+    color: var(--vcg-accent-text, var(--vcg-accent, #949ba4));
 }
 
 .vc-glance-msg-edit-input {
@@ -2917,7 +2942,7 @@ body[data-vc-glance-open] [class*=" panels_"] {
     padding: 0;
     border: none;
     background: none;
-    color: var(--text-link, #00a8fc);
+    color: var(--vcg-accent-text, var(--text-link, #00a8fc));
     font-size: inherit;
     cursor: pointer;
 }
@@ -2989,20 +3014,24 @@ img.vc-glance-occupant-joined {
     flex-shrink: 0;
 }
 
-/* ---- Cards: subtle physical hover lift ---- */
+/* ---- Cards: subtle physical hover lift ----
+   `top`, not `transform`: a transform makes Chromium drop the stage's
+   background-attachment: fixed, and the card's tint would jump on hover. */
 
 .vc-glance-card {
-    transition: transform 0.12s ease, box-shadow 0.12s ease;
+    position: relative;
+    top: 0;
+    transition: top 0.12s ease, box-shadow 0.12s ease;
 }
 
 .vc-glance-card:hover {
-    transform: translateY(-1px);
+    top: -1px;
     box-shadow: 0 3px 12px rgb(0 0 0 / 22%);
 }
 
 body.vc-glance-dragging .vc-glance-card,
 body.vc-glance-dragging .vc-glance-card:hover {
-    transform: none;
+    top: 0;
     box-shadow: none;
 }
 
@@ -3010,7 +3039,7 @@ body.vc-glance-dragging .vc-glance-card:hover {
     .vc-glance-card,
     .vc-glance-card:hover {
         transition: none;
-        transform: none;
+        top: 0;
     }
 }
 
@@ -3075,7 +3104,8 @@ body.vc-glance-dragging .vc-glance-card:hover {
 }
 
 .vc-glance-inbox-tab-active .vc-glance-inbox-tab-count {
-    background: var(--vcg-accent, var(--brand-500, #5865f2));
+    background: var(--vcg-t-action-primary);
+    color: var(--vcg-on-accent, #fff);
 }
 
 /* ---- Inbox / Recent Mentions ---- */
@@ -3193,6 +3223,67 @@ body.vc-glance-dragging .vc-glance-card:hover {
     color: #fff;
 }
 
+/* ---- Reminders: Discord's message reminders beside the person's own notes ----
+   The message rows are the Saved Messages rows (.vc-glance-bookmark-row-native),
+   so thumb, text, tags and surfaces come from there. */
+
+/* All / Messages / Notes: the Customize panel's segmented control, made compact */
+.vc-glance-reminder-filter .vc-glance-segment {
+    min-height: 26px;
+    padding: 4px 0;
+    font-size: 12px;
+}
+
+/* When it is due. Weight carries it as much as colour: red once overdue, the
+   accent when it is close, quiet when it is far off. */
+.vc-glance-due {
+    flex-shrink: 0;
+    padding: 3px 6px;
+    border-radius: 5px;
+    font-size: 10.5px;
+    font-weight: 800;
+    letter-spacing: 0.03em;
+    line-height: 1.2;
+    white-space: nowrap;
+}
+
+.vc-glance-due-over {
+    background: var(--vcg-t-danger);
+    color: #fff;
+}
+
+.vc-glance-due-soon {
+    background: var(--vcg-t-action-primary);
+    color: var(--vcg-on-accent, #fff);
+}
+
+.vc-glance-due-later {
+    background: color-mix(in srgb, var(--vcg-t-text-primary) 8%, transparent);
+    color: var(--vcg-t-text-primary);
+}
+
+/* On a message row the label rides the right edge of the meta line, where a
+   bookmark has its saved time */
+.vc-glance-bookmark-row-native .vc-glance-due {
+    margin-left: auto;
+}
+
+/* The pencil mark of a text note: the thumb's circle, centred in its row. The
+   thumb's own rule comes later in the file, so this names both classes. */
+.vc-glance-bookmark-thumb.vc-glance-reminder-note-icon {
+    margin-top: 0;
+}
+
+/* Beside a due label and two buttons a note's title has little room in a narrow
+   column, so it wraps (two lines at most) instead of shrinking to a few letters */
+.vc-glance-reminder-note-row .vc-glance-row-title {
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    white-space: normal;
+    overflow-wrap: anywhere;
+}
+
 /* ---- Events ---- */
 
 .vc-glance-event-countdown {
@@ -3300,6 +3391,167 @@ body.vc-glance-dragging .vc-glance-card:hover {
     color: var(--vcg-t-text-secondary);
     font-size: 11px;
     font-weight: 700;
+}
+
+/* ---- Saved Messages from Discord: row extras, footer, the old-saves row ----
+   The rows themselves are the ones above. The two-line text is
+   .vc-glance-mention-content. */
+
+/* In a narrow column the author, place and time cannot share one line, so the
+   meta line wraps rather than squeezing the place out. */
+.vc-glance-bookmark-row-native .vc-glance-mention-meta {
+    flex-wrap: wrap;
+    row-gap: 1px;
+}
+
+.vc-glance-bookmark-row-native .vc-glance-mention-location {
+    max-width: 100%;
+}
+
+/* The buttons stack at the right edge, as in the mockup, so the message text
+   keeps the width. This is the row Saved Messages and Reminders share, so
+   Done and Snooze stack the same way. The squares are the mockup's 24px. */
+.vc-glance-bookmark-row-native .vc-glance-row-actions {
+    flex-direction: column;
+    gap: 4px;
+}
+
+.vc-glance-bookmark-row-native .vc-glance-row-actions .vc-glance-icon-button {
+    width: 24px;
+    height: 24px;
+}
+
+/* The saved time rides the right edge of the meta line, as in the mockup */
+.vc-glance-bookmark-when {
+    flex-shrink: 0;
+    margin-left: auto;
+    white-space: nowrap;
+}
+
+.vc-glance-bookmark-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 6px;
+}
+
+.vc-glance-bookmark-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    min-width: 0;
+    max-width: 100%;
+    padding: 3px 7px;
+    border-radius: 5px;
+    background: color-mix(in srgb, var(--vcg-t-text-primary) 8%, transparent);
+    color: var(--vcg-t-text-secondary);
+    font-size: 11px;
+    line-height: 1.2;
+}
+
+.vc-glance-bookmark-chip-icon {
+    flex-shrink: 0;
+}
+
+.vc-glance-bookmark-chip > span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* The person's own note on a bookmark, in the accent text colour */
+.vc-glance-bookmark-note {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    min-width: 0;
+    margin-top: 6px;
+    color: var(--vcg-accent-text, var(--vcg-t-action-primary));
+    font-size: 12px;
+    line-height: 1.3;
+}
+
+.vc-glance-bookmark-note > svg {
+    flex-shrink: 0;
+}
+
+.vc-glance-bookmark-note > span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* Load 25 more. It is a .vc-glance-row too, so the material and light-theme
+   surfaces and the hover come with it. */
+.vc-glance-bookmark-more {
+    justify-content: center;
+    width: 100%;
+    margin-top: 6px;
+    border: none;
+    color: var(--vcg-accent-text, var(--vcg-t-action-primary));
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.vc-glance-bookmark-more:focus-visible {
+    outline: 2px solid var(--vcg-t-focus);
+    outline-offset: 1px;
+}
+
+/* Loading, and a failed load: quiet lines, not alerts */
+.vc-glance-bookmark-status {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    margin-top: 6px;
+    padding: 8px 10px;
+    color: var(--vcg-t-text-secondary);
+    font-size: 12px;
+}
+
+/* A dashed outline says "set aside", as the empty state does, and works on any theme */
+.vc-glance-legacy {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-top: 12px;
+    padding: 10px;
+    border: 1px dashed color-mix(in srgb, var(--vcg-t-text-secondary) 45%, transparent);
+    border-radius: var(--vcg-t-radius-row);
+    color: var(--vcg-t-text-secondary);
+    font-size: 12px;
+    line-height: 1.4;
+}
+
+.vc-glance-legacy-icon {
+    flex-shrink: 0;
+}
+
+.vc-glance-legacy-text {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+.vc-glance-legacy-text strong {
+    color: var(--vcg-t-text-primary);
+    font-weight: 600;
+}
+
+.vc-glance-legacy-go {
+    flex-shrink: 0;
+    padding: 7px 11px;
+    font-size: 12px;
+    white-space: nowrap;
+}
+
+.vc-glance-bookmark-subhead {
+    margin: 14px 2px 6px;
+    color: var(--vcg-t-text-secondary);
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
 }
 
 /* ========== Popup: formatting toolbar & NEW divider ========== */
@@ -3557,7 +3809,7 @@ body.vc-glance-dragging .vc-glance-card:hover {
 
 .vc-glance-note-check input {
     margin-top: 3px;
-    accent-color: var(--vcg-accent, var(--brand-500, #5865f2));
+    accent-color: var(--vcg-t-action-primary);
     cursor: pointer;
 }
 
@@ -4026,7 +4278,7 @@ body.vc-glance-dragging .vc-glance-card:hover {
 }
 
 .vc-glance-orion-task-active .vc-glance-orion-task-status {
-    color: var(--vcg-accent, var(--brand-500, #5865f2));
+    color: var(--vcg-accent-text, var(--vcg-accent, #5865f2));
 }
 
 .vc-glance-orion-task-done .vc-glance-orion-task-status {
@@ -4043,7 +4295,7 @@ body.vc-glance-dragging .vc-glance-card:hover {
 .vc-glance-orion-fill {
     height: 100%;
     border-radius: inherit;
-    background: var(--vcg-accent, var(--brand-500, #5865f2));
+    background: var(--vcg-t-action-primary);
     transition: width 0.3s ease;
 }
 
@@ -4114,13 +4366,8 @@ body.vc-glance-privacy .vc-glance-weather-location {
    The selectors above already gate their specific animations/transitions per
    component. This is belt-and-suspenders coverage for anything nested under
    the plugin's layer or popup backdrop that isn't individually scoped above
-   (e.g. .vc-glance-orion-fill's width transition). .vc-glance-overlay is
-   listed on its own (not with a `*`): its right-edge transition, for the
-   native theme editor docking beside it, lives on that element itself, one
-   level above .vc-glance-layer, so the descendant selector below can't reach
-   it. */
+   (e.g. .vc-glance-orion-fill's width transition). */
 @media (prefers-reduced-motion: reduce) {
-    .vc-glance-overlay,
     .vc-glance-layer *,
     .vc-glance-popup-backdrop * {
         animation-duration: 0.001ms !important;
@@ -4135,4 +4382,92 @@ body.vc-glance-privacy .vc-glance-weather-location {
     .vc-glance-popup-backdrop {
         animation: none !important;
     }
+}
+
+/* ========== Load states (data.ts storeCore) ==========
+   Until this account's saved data has loaded, the workspace is replaced by
+   one of these, never by an empty grid that would read as lost data. */
+
+.vc-glance-load-pending {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    padding: 72px 0;
+    color: var(--vcg-t-text-secondary);
+    font-size: 14px;
+}
+
+/* The one motion here: tells the reader work is happening */
+.vc-glance-load-spinner {
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    border: 2px solid var(--vcg-t-divider);
+    border-top-color: var(--vcg-t-text-primary);
+    animation: vc-glance-load-spin 1s linear infinite;
+}
+
+@keyframes vc-glance-load-spin {
+    to { transform: rotate(1turn); }
+}
+
+.vc-glance-load-failed {
+    max-width: 440px;
+    margin: 48px auto;
+    padding: 40px 32px;
+    border: 1px solid var(--vcg-t-border);
+    border-radius: var(--vcg-t-radius-widget);
+    background: var(--vcg-t-surface-widget);
+    text-align: center;
+}
+
+.vc-glance-load-icon {
+    color: var(--vcg-t-action-primary);
+}
+
+.vc-glance-load-title {
+    margin: 14px 0 8px;
+    font-size: 20px;
+    font-weight: 800;
+    color: var(--vcg-t-text-primary);
+}
+
+.vc-glance-load-body {
+    margin: 0 auto 20px;
+    max-width: 340px;
+    color: var(--vcg-t-text-secondary);
+    font-size: 14px;
+    line-height: 1.45;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .vc-glance-load-spinner {
+        animation: none;
+    }
+}
+
+/* ========== One continuous stage ==========
+   The tint layer of every card (and of the hero in override mode) is fixed
+   to the window, so one wash spans the whole page and each card shows the
+   part of it behind that card. Each material rule's `background` shorthand
+   resets attachment to scroll, so these come last and repeat its selectors.
+   Glass keeps its specular shine per card (first layer) and fixes only the
+   tint. Nothing between a card and the window may carry a transform, even for
+   a moment: see the hover lift above, and vc-glance-widget-in, which moves
+   `top` for the same reason. */
+.vc-glance-material-classic .vc-glance-card,
+.vc-glance-material-acrylic .vc-glance-card,
+.vc-glance-on-light.vc-glance-material-classic .vc-glance-card,
+.vc-glance-on-light.vc-glance-material-classic .vc-glance-hero {
+    background-attachment: fixed, scroll;
+}
+
+.vc-glance-material-glass .vc-glance-card {
+    background-attachment: scroll, fixed, scroll;
+}
+
+.vc-glance-bg-override .vc-glance-card,
+.vc-glance-bg-override .vc-glance-hero {
+    background-attachment: fixed, scroll !important;
 }

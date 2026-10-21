@@ -20,6 +20,7 @@ import {
     useStateFromStores
 } from "@webpack/common";
 
+import { finders } from "../../discordChecks";
 import { openChannelPopup } from "../ChannelPopup";
 import { CheckIcon, CloseIcon } from "../icons";
 import { ackAllDms, ackChannel, markAllRead, MentionActions, RecentMentionsStore } from "../notifications";
@@ -31,7 +32,7 @@ const logger = new Logger("AtAGlance");
 // real latest, not a stale cached one. Exported so other files needing the
 // same module (the popup's reply-jump, for one) reuse this lookup instead of
 // declaring their own copy of the same findByPropsLazy call.
-export const MessageFetchActions = findByPropsLazy("fetchMessages", "jumpToMessage") as {
+export const MessageFetchActions = findByPropsLazy(...finders.messageJumpActions.props) as {
     fetchMessages(options: { channelId: string; limit?: number; }): Promise<unknown>;
     jumpToMessage(options: { channelId: string; messageId: string; flash?: boolean; jumpType?: string; }): void;
 };

@@ -19,8 +19,6 @@ import {
     React,
     ReadStateStore,
     SelectedChannelStore,
-    showToast,
-    Toasts,
     Tooltip,
     UserStore,
     useStateFromStores,
@@ -28,6 +26,7 @@ import {
 } from "@webpack/common";
 
 import { isGuildCollapsed, moveWatchedChannel, setWatchedChannelsOrder, toggleGuildCollapsed, toggleWatchedChannel, useGlanceConfig } from "../../data";
+import { finders } from "../../discordChecks";
 import { settings } from "../../settings";
 import { guildAcronym } from "../../util";
 import { openChannelPopup } from "../ChannelPopup";
@@ -35,19 +34,20 @@ import { closeGlance } from "../GlanceLayer";
 import { usePoll } from "../hooks";
 import { ChatIcon, ChevronIcon, DotsIcon, HashIcon, HeadphonesIcon, MicIcon, SpeakerIcon, VideoIcon } from "../icons";
 import { RowDragGhost, RowDropSlot, useRowDrag } from "../rowDrag";
+import { glanceToast } from "../toast";
 import { WidgetCard } from "../WidgetCard";
 import { dmIdentity } from "./Mentions";
 
 const logger = new Logger("AtAGlance");
 
 // The same action Discord runs when you click a voice channel in the sidebar
-const VoiceActions = findByPropsLazy("selectVoiceChannel", "selectChannel") as {
+const VoiceActions = findByPropsLazy(...finders.voiceActions.props) as {
     selectVoiceChannel(channelId: string): void;
 };
 
 // Who is talking right now - Discord only receives speaking data for the
 // voice channel YOU are connected to, so rings appear only there
-const SpeakingStore = findStoreLazy("SpeakingStore") as {
+const SpeakingStore = findStoreLazy(finders.speakingStore.name) as {
     getSpeakers(): string[];
     addChangeListener(cb: () => void): void;
     removeChangeListener(cb: () => void): void;
@@ -228,7 +228,7 @@ function VoiceChannelRow({ channelId, siblingIds, index, hideGuild }: { channelI
 
     const join = () => {
         if (!canJoin) {
-            showToast("You don't have permission to join that channel.", Toasts.Type.FAILURE);
+            glanceToast("You don't have permission to join that channel.", "failure");
             return;
         }
         closeGlance();
