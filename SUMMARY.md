@@ -121,15 +121,16 @@ app grid, inside Discord's own React tree, so Discord's layout does the placing:
 right of the server rail, under the title bar and any notice bar, and narrowed by
 the theme editor when that docks. The plugin does not measure Discord's title bar
 or rails, or watch the page, to find its place. The third puts a
-`data-vc-glance-panels` marker on Discord's user panel, so the dashboard can hide
-that panel by the marker instead of by a hashed class name.
+`data-vc-glance-panels` marker on Discord's user panel, so the dashboard can stand
+that panel in the server list as a strip, found by the marker instead of by a hashed
+class name.
 
 Each patch is its own entry, so when Discord changes one of them the loss stays
 small. A patch that rewrites the main content area takes the whole client down
 with it, which is the reason none of these do. If the first breaks, the tab
 disappears. If the second breaks, opening the dashboard says it couldn't open
 instead of leaving a blank page. If the third breaks, Discord's own user panel
-stays visible. Nothing else goes with them.
+stays where Discord draws it. Nothing else goes with them.
 
 Configuration lives in IndexedDB through Vencord's DataStore and is rebuilt by
 allowlist on every load. Stored data is never spread into a config object, so a

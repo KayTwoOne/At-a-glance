@@ -1,5 +1,22 @@
 # Changelog
 
+## 3.2.0 - 2026-11-09
+
+### User area: Discord's own, standing in the server list
+- While the dashboard is open, the bottom-left user area is now Discord's own
+  section stood on its end in the server list, the same strip as Limelight 1.2,
+  instead of a copy drawn by At a glance. Your avatar shows its decoration and
+  opens your profile popout as Discord's does; mute, deafen and settings are
+  Discord's own buttons, with their menus; and your nameplate is Discord's own,
+  turned on its side with its colour rising from the art.
+- In a call, the green ping icon sits at the top of the strip: hover for your
+  ping, click for the details.
+- The server list stops above the strip by itself, as it does above Discord's
+  section.
+- Other plugins that restyle Discord's user section (CollapsibleUI pins it full
+  width) can't stretch the strip: its rules carry the strength of an ID and set a
+  minimum width as well as a maximum.
+
 ## 3.1.0 - 2026-10-20
 
 The dashboard now sits inside Discord's own layout instead of on top of it,

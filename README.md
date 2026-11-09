@@ -4,7 +4,7 @@
 
 **A customizable overview page for Discord, one tab above your Friends button.**
 
-[![Version](https://img.shields.io/badge/version-3.1.0-D33699?style=flat-square)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-3.2.0-D33699?style=flat-square)](CHANGELOG.md)
 [![Vencord](https://img.shields.io/badge/vencord%20%7C%20equicord-userplugin-9c85ef?style=flat-square)](https://vencord.dev)
 [![Discord](https://img.shields.io/badge/discord-stable-57F287?style=flat-square)](#install)
 [![License](https://img.shields.io/badge/license-GPL--3.0-blue?style=flat-square)](LICENSE)
@@ -37,8 +37,10 @@ native message rendering, native pickers, native send pipeline.
   automatically, Nitro gradients included. Three materials (classic, acrylic, glass)
   and one-click colour presets (Nord, Dracula, Catppuccin and more) at subtle,
   tasteful intensities - the background is entirely yours to set, solid by default.
-- **Your nameplate, everywhere.** The bottom-left user area wraps your Nitro
-  nameplate around the whole strip, fading up into the sidebar.
+- **Your user area, standing in the server list.** While the dashboard is open,
+  Discord's own user section stands on its end at the foot of the server list: your
+  avatar (decoration and all, opening your profile), mute, deafen and settings, over
+  your Nitro nameplate turned on its side, with the ping icon on top in a call.
 - **Privacy blur.** One button in the top bar blurs pinned friends, server names
   and your weather location for a screen share or a screenshot. Everything stays
   clickable while it's on, and it clears itself when you close the dashboard.

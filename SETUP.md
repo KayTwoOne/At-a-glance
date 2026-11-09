@@ -219,10 +219,10 @@ plugin's `native.ts` changed - which for these two means the first install, and 
   -> the patch that places the dashboard in Discord's own layout no longer matches
   after a Discord update. Look for a failed patch the same way; the dashboard returns
   once the plugin is updated.
-- **Discord's own user panel (your avatar and the mute and deafen buttons) stays visible
-  at the bottom left while the dashboard is open** -> the small patch that marks that
-  panel so it can be hidden no longer matches. Nothing else is affected, and it is fixed
-  by the same update.
+- **Discord's own user panel (your avatar and the mute and deafen buttons) stays at the
+  bottom left instead of standing in the server list while the dashboard is open** -> the
+  small patch that marks that panel no longer matches. Nothing else is affected, and it is
+  fixed by the same update.
 - **"Your dashboard couldn't be loaded"** -> At a glance couldn't read your saved data.
   Nothing has been changed or lost, and it keeps retrying by itself (after 2 seconds,
   then 10, then 30, then every 30 seconds). **Try again** retries straight away. Until

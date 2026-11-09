@@ -40,7 +40,6 @@ import { GlanceHeader } from "./GlanceHeader";
 import { useColumnCount } from "./hooks";
 import { CheckIcon, DashboardIcon, DotsIcon, EyeIcon, GripIcon, PaletteIcon, PlusIcon } from "./icons";
 import { openConfirm } from "./PromptModal";
-import { RailUserStrip } from "./RailUserStrip";
 import { glanceToast } from "./toast";
 import { BookmarksWidget } from "./widgets/Bookmarks";
 import { ClientPerfWidget } from "./widgets/ClientPerf";
@@ -225,7 +224,7 @@ export function openGlance() {
     try {
         NavigationRouter.transitionTo("/channels/@me");
     } catch { }
-    // Lets CSS hide Discord's own user panel while RailUserStrip replaces it
+    // Lets CSS stand Discord's own user section in the server list as a strip
     document.body.setAttribute("data-vc-glance-open", "");
     openedAt = Date.now();
     const thisOpen = openedAt;
@@ -848,10 +847,6 @@ function GlanceLayer() {
                 of an inline width the two of them would have to coordinate on. */}
             <ErrorBoundary noop>
                 <CustomizePanel />
-            </ErrorBoundary>
-
-            <ErrorBoundary noop>
-                <RailUserStrip />
             </ErrorBoundary>
 
             {paletteOpen && (

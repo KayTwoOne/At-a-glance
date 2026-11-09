@@ -34,9 +34,9 @@ export const patches = [
             replace: "$self.renderGlanceHost(),"
         }
     },
-    // Marks Discord's user panel so CSS can hide it while the dashboard is
-    // open (RailUserStrip replaces it) without a hashed class selector. Its
-    // own entry, so a failure here costs only the hiding.
+    // Marks Discord's user section so CSS can stand it in the server list as a
+    // strip while the dashboard is open, without a hashed class selector. Its
+    // own entry, so a failure here leaves Discord's section where it is.
     {
         find: '"--custom-app-panels-height"',
         replacement: {
@@ -60,7 +60,6 @@ export const finders = {
     messageJumpActions: { kind: "props", props: ["fetchMessages", "jumpToMessage"] },
     mentionActions: { kind: "props", props: ["fetchRecentMentions", "deleteRecentMention"] },
     messageActions: { kind: "props", props: ["editMessage", "sendMessage"] },
-    audioActions: { kind: "props", props: ["toggleSelfMute", "toggleSelfDeaf"] },
     relationshipActions: { kind: "props", props: ["updateRelationship", "blockUser"] },
     callActions: { kind: "props", props: ["ring", "stopRinging"] },
     recentMentionsStore: { kind: "store", name: "RecentMentionsStore" },

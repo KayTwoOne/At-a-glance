@@ -147,11 +147,9 @@
     overflow: hidden;
 }
 
-/* The rail this sits next to hides Discord's own bottom-left user panel
-   under RailUserStrip (see visibility:hidden on [data-vc-glance-panels] further
-   down) - that panel's own chrome doesn't go away, only its paint does, so
-   whatever the rail draws behind it keeps showing through and it runs
-   lighter than the plain icon rail above it. A flat border can't track that
+/* The rail this sits next to runs lighter toward the bottom, where Discord's
+   own user section stands as a strip while the dashboard is open (see "Your
+   user section, standing in the server list" further down). A flat border can't track that
    climb, so it reads as a hard, worsening seam toward the bottom. This
    doesn't chase the rail's exact curve (that would fight "distinct, not
    matching") - it just lets the seam itself warm up gradually so the two
@@ -2014,136 +2012,130 @@ body.vc-glance-dragging .vc-glance-column:empty {
     background: var(--status-online, #23a55a);
 }
 
-/* ========== Rail user strip (vertical user panel under the server list) ========== */
+/* ========== Your user section, standing in the server list ========== */
 
-/* Discord's own bottom-left user panel (and the game-activity chip inside it)
-   is hidden outright while At a glance is open - our strip replaces it, and
-   with the strip now TRANSPARENT nothing may linger behind it. The panel is
-   found by the data-vc-glance-panels marker a patch puts on it
-   (discordChecks.ts), not by one of Discord's hashed class names. */
-body[data-vc-glance-open] [data-vc-glance-panels] {
-    visibility: hidden !important;
-}
-
-.vc-glance-rail-strip {
-    position: fixed;
-    left: 0;
-    bottom: 0;
-    /* Orders the strip inside .vc-glance-host's stacking context only. What
-       Discord's sidebar resize handle (101) and user panel (10) compare
-       against is the host's own z-index (150), which is what keeps them
-       under the strip. Discord's popouts and tooltips (1000+) sit in layers
-       above the host, so they are not covered. */
-    z-index: 120;
-    width: var(--custom-guild-list-width, 72px);
+/*
+ * Discord's own user section stands in the server list as a strip while the
+ * dashboard is open, the same strip as Limelight 1.2 (Kaylum, 9 Nov 2026): the
+ * green ping icon on top when you're in a call, then your avatar, mute, deafen
+ * and settings over your nameplate turned a quarter. Nothing here is redrawn:
+ * these rules only lay out, hide and turn Discord's elements, so the avatar (with
+ * its decoration and the profile popout it opens), the buttons' tooltips and
+ * menus, and the ping icon's hover stay Discord's. The section is found by the
+ * data-vc-glance-panels marker a patch puts on it (discordChecks.ts). Discord
+ * measures this section (--custom-app-panels-height), so the server list stops
+ * above the strip itself. Nothing sets overflow, so a decoration is never clipped.
+ *
+ * Every rule here ends its section with :not(#vc-glance-strip-guard), which matches
+ * the section (nothing has that id) and gives the selector an ID's strength.
+ * CollapsibleUI pins this same section with left: 0; right: 0; width: auto, all
+ * !important, from three attributes (four while hovered); two !important rules are
+ * settled by specificity, and the strip came out window-wide (Kaylum, 9 Nov). No
+ * class- or attribute-based rule can outrank the guard.
+ */
+body[data-vc-glance-open] :is([class^="sidebar_"], [class*=" sidebar_"]) > section[data-vc-glance-panels]:is([class^="panels_"], [class*=" panels_"]):not(#vc-glance-strip-guard) {
+    position: fixed !important;
+    inset: auto auto 8px calc((var(--custom-guild-list-width, 72px) - 56px) / 2) !important;
+    width: 56px !important;
+    min-width: 56px !important;
+    max-width: 56px !important;
     display: flex;
     flex-direction: column;
-    align-items: center;
-    /* Transparent: the theme's own sidebar shows through, and the nameplate
-       (below) fades up into it - no box edges against gradient themes. */
-    background: transparent;
+    gap: 0;
+    padding: 0;
 }
 
-/* ---- Full-bleed user area: the nameplate wraps the WHOLE bottom-left strip,
-   flush to the edges, fading out ~5px from its top so it melts upward into the
-   sidebar instead of sitting in a rounded card. ---- */
-
-.vc-glance-rail-panel {
-    position: relative;
-    display: flex;
-    justify-content: center;
-    width: 100%;
-    /* Head-room above the avatar so the fade has art to dissolve */
-    padding: 34px 0 10px;
+/* Everything in the section but the voice panel and the account row */
+body[data-vc-glance-open] :is([class^="sidebar_"], [class*=" sidebar_"]) > section[data-vc-glance-panels]:is([class^="panels_"], [class*=" panels_"]):not(#vc-glance-strip-guard) > :not(:has(:is([class^="rtcConnectionStatus_"], [class*=" rtcConnectionStatus_"]), :is([class^="accountPopoutButtonWrapper_"], [class*=" accountPopoutButtonWrapper_"]))),
+body[data-vc-glance-open] :is([class^="sidebar_"], [class*=" sidebar_"]) > section[data-vc-glance-panels]:is([class^="panels_"], [class*=" panels_"]):not(#vc-glance-strip-guard) :is([class^="wrapper_"], [class*=" wrapper_"]):has(:is([class^="rtcConnectionStatus_"], [class*=" rtcConnectionStatus_"])) > :not(:has(:is([class^="rtcConnectionStatus_"], [class*=" rtcConnectionStatus_"]))) {
+    display: none !important;
 }
 
-.vc-glance-rail-plate {
-    position: absolute;
-    inset: 0;
-    z-index: 0;
-    overflow: hidden;
-    /* Fully transparent at the very top, art starts appearing ~5px down and is
-       fully opaque by ~48px - the "fades upward into the side panel" line */
-    -webkit-mask-image: linear-gradient(to bottom, transparent 5px, black 48px);
-    mask-image: linear-gradient(to bottom, transparent 5px, black 48px);
-}
-
-.vc-glance-rail-plate-media {
-    position: absolute;
-    inset: 0;
-    width: 100%;
-    height: 100%;
-    object-fit: cover;
-    object-position: center;
-    pointer-events: none;
-}
-
-/* Scrim keeps the avatar + controls legible over the nameplate art */
-.vc-glance-rail-plate-scrim {
-    position: absolute;
-    inset: 0;
-    pointer-events: none;
-    background: linear-gradient(to bottom, rgb(0 0 0 / 8%), rgb(0 0 0 / 38%));
-}
-
-.vc-glance-rail-panel-content {
+/* The strip is one box, as Discord's own section is (Kaylum, 9 Nov): the section
+   keeps Discord's panel colour, border and corners, and its two parts draw nothing
+   of their own. The voice panel is the top 40px, holding only the ping icon, above
+   the nameplate that rises under it. */
+body[data-vc-glance-open] :is([class^="sidebar_"], [class*=" sidebar_"]) > section[data-vc-glance-panels]:is([class^="panels_"], [class*=" panels_"]):not(#vc-glance-strip-guard) :is([class^="container_"], [class*=" container_"]):has(> :is([class^="connection_"], [class*=" connection_"])) {
+    display: grid;
+    place-items: center;
     position: relative;
     z-index: 1;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 6px;
-}
-
-.vc-glance-rail-controls {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 2px;
-}
-
-.vc-glance-rail-avatar-button {
+    height: 40px;
     padding: 0;
-    border: none;
-    background: none;
-    cursor: pointer;
 }
 
-.vc-glance-rail-avatar {
-    width: 32px;
-    height: 32px;
-}
-
-.vc-glance-rail-avatar .vc-glance-status {
-    border-color: var(--custom-theme-background, var(--background-tertiary, #1a1a1e));
-    width: 10px;
-    height: 10px;
-}
-
-.vc-glance-rail-panel-plated .vc-glance-rail-avatar .vc-glance-status {
-    border-color: rgb(0 0 0 / 45%);
-}
-
-.vc-glance-rail-button {
-    display: flex;
-    align-items: center;
+body[data-vc-glance-open] :is([class^="sidebar_"], [class*=" sidebar_"]) > section[data-vc-glance-panels]:is([class^="panels_"], [class*=" panels_"]):not(#vc-glance-strip-guard) :is([class^="connection_"], [class*=" connection_"]) {
     justify-content: center;
-    width: 36px;
-    height: 32px;
-    border: none;
-    border-radius: var(--vcg-t-radius-row);
-    background: transparent;
-    color: var(--interactive-normal, var(--icon-muted, #b5bac1));
-    cursor: pointer;
 }
 
-.vc-glance-rail-button:hover {
-    background: var(--interactive-background-hover, rgb(255 255 255 / 8%));
-    color: var(--text-default, #fff);
+body[data-vc-glance-open] :is([class^="sidebar_"], [class*=" sidebar_"]) > section[data-vc-glance-panels]:is([class^="panels_"], [class*=" panels_"]):not(#vc-glance-strip-guard) :is([class^="inner_"], [class*=" inner_"]) {
+    flex: none;
 }
 
-.vc-glance-rail-button-danger {
-    color: var(--vcg-t-danger);
+body[data-vc-glance-open] :is([class^="sidebar_"], [class*=" sidebar_"]) > section[data-vc-glance-panels]:is([class^="panels_"], [class*=" panels_"]):not(#vc-glance-strip-guard) :is([class^="ping_"], [class*=" ping_"]) {
+    margin: 0;
+}
+
+/* "Voice Connected" and the channel, Krisp and disconnect, the four action buttons
+   and anyone listening along: the call's own bar has what matters */
+body[data-vc-glance-open] :is([class^="sidebar_"], [class*=" sidebar_"]) > section[data-vc-glance-panels]:is([class^="panels_"], [class*=" panels_"]):not(#vc-glance-strip-guard) :is([class^="labelWrapper_"], [class*=" labelWrapper_"]),
+body[data-vc-glance-open] :is([class^="sidebar_"], [class*=" sidebar_"]) > section[data-vc-glance-panels]:is([class^="panels_"], [class*=" panels_"]):not(#vc-glance-strip-guard) :is([class^="voiceButtonsContainer_"], [class*=" voiceButtonsContainer_"]),
+body[data-vc-glance-open] :is([class^="sidebar_"], [class*=" sidebar_"]) > section[data-vc-glance-panels]:is([class^="panels_"], [class*=" panels_"]):not(#vc-glance-strip-guard) :is([class^="actionButtons_"], [class*=" actionButtons_"]),
+body[data-vc-glance-open] :is([class^="sidebar_"], [class*=" sidebar_"]) > section[data-vc-glance-panels]:is([class^="panels_"], [class*=" panels_"]):not(#vc-glance-strip-guard) :is([class^="voiceUsers_"], [class*=" voiceUsers_"]) {
+    display: none !important;
+}
+
+/* The account row, stood on its end below it: 196px, the Trimmed length. Your
+   avatar at the top, 2px down, and mute, deafen and settings from the foot of the
+   nameplate upwards (Kaylum, 9 Nov) */
+body[data-vc-glance-open] :is([class^="sidebar_"], [class*=" sidebar_"]) > section[data-vc-glance-panels]:is([class^="panels_"], [class*=" panels_"]):not(#vc-glance-strip-guard) :is([class^="container_"], [class*=" container_"]):has(> :is([class^="buttons_"], [class*=" buttons_"])) {
+    position: relative;
+    flex-direction: column !important;
+    justify-content: space-between;
+    align-items: center;
+    gap: 4px;
+    height: 196px;
+    padding: 2px 0 10px !important;
+}
+
+/* The avatar button: just the avatar now, opening your profile as it always has */
+body[data-vc-glance-open] :is([class^="sidebar_"], [class*=" sidebar_"]) > section[data-vc-glance-panels]:is([class^="panels_"], [class*=" panels_"]):not(#vc-glance-strip-guard) :is([class^="accountPopoutButtonWrapper_"], [class*=" accountPopoutButtonWrapper_"]) {
+    flex: none;
+    justify-content: center;
+    margin: 0 !important;
+    padding: 4px;
+}
+
+/* Your name and handle: read top to bottom they'd look wrong (Kaylum, 9 Nov) */
+body[data-vc-glance-open] :is([class^="sidebar_"], [class*=" sidebar_"]) > section[data-vc-glance-panels]:is([class^="panels_"], [class*=" panels_"]):not(#vc-glance-strip-guard) :is([class^="nameTag_"], [class*=" nameTag_"]) {
+    display: none !important;
+}
+
+body[data-vc-glance-open] :is([class^="sidebar_"], [class*=" sidebar_"]) > section[data-vc-glance-panels]:is([class^="panels_"], [class*=" panels_"]):not(#vc-glance-strip-guard) :is([class^="buttons_"], [class*=" buttons_"]) {
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+}
+
+/* Discord's three are always the last: mute, deafen, settings. Anything another
+   plugin puts before them (a game button, Kaylum, 9 Nov) goes. */
+body[data-vc-glance-open] :is([class^="sidebar_"], [class*=" sidebar_"]) > section[data-vc-glance-panels]:is([class^="panels_"], [class*=" panels_"]):not(#vc-glance-strip-guard) :is([class^="buttons_"], [class*=" buttons_"]) > :not(:nth-last-child(-n + 3)) {
+    display: none !important;
+}
+
+/* The nameplate: Discord's own layer, drawn along a 236 by 56 row as it draws it,
+   then turned a quarter about its centre, so its art end lands at the bottom and its
+   wash rises to the top of the strip, fading out under the ping icon as Discord's
+   own section does under Voice Connected. It runs the whole strip: 40px above the
+   account row it belongs to. Its image or video turns with it. */
+body[data-vc-glance-open] :is([class^="sidebar_"], [class*=" sidebar_"]) > section[data-vc-glance-panels]:is([class^="panels_"], [class*=" panels_"]):not(#vc-glance-strip-guard) :is([class^="fitInAccount_"], [class*=" fitInAccount_"]) {
+    inset: auto !important;
+    top: calc(50% - 20px) !important;
+    left: 50% !important;
+    width: 236px !important;
+    height: 56px !important;
+    border-radius: var(--radius-sm);
+    transform: translate(-50%, -50%) rotate(90deg);
 }
 
 /* ========== Text channel popup ==========
@@ -4143,24 +4135,6 @@ body.vc-glance-dragging .vc-glance-card:hover {
    useOnLightTheme() itself and puts the class directly on the menu instead. */
 .vc-glance-dropdown-menu.vc-glance-on-light {
     border-color: rgb(0 0 0 / 10%);
-}
-
-/* ---- Rail user strip inks: the strip is transparent, so its controls sit on
-   the THEME's sidebar. Light theme + no nameplate art behind = dark ink; when
-   the nameplate IS there its scrim darkens the area, so light ink returns. */
-.vc-glance-on-light .vc-glance-rail-strip {
-    --text-default: #2e3338;
-    --icon-muted: #4e5058;
-    --interactive-normal: #4e5058;
-    color: #2e3338;
-}
-
-.vc-glance-on-light .vc-glance-rail-panel-plated,
-.vc-glance-rail-panel-plated {
-    --text-default: #f2f3f5;
-    --icon-muted: #dbdee1;
-    --interactive-normal: #dbdee1;
-    color: #f2f3f5;
 }
 
 /* ========================================================================
